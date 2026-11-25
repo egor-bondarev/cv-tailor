@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "roles": [
+    {
+      "id": "acme-senior-sdet",
+      "employer": "Acme Analytics",
+      "employer_description": "B2B analytics platform",
+      "title": "Senior SDET - Test Infrastructure",
+      "start": "2024-03",
+      "end": null,
+      "project": null,
+      "is_current": true
+    },
+    {
+      "id": "globex-qa-engineer",
+      "employer": "Globex",
+      "employer_description": "Document processing software",
+      "title": "QA Automation Engineer",
+      "start": "2019-06",
+      "end": "2024-02",
+      "project": null,
+      "is_current": false
+    }
+  ],
+  "facts": [
+    {
+      "id": "f-001",
+      "role_id": "acme-senior-sdet",
+      "type": "achievement",
+      "claim": "Cut the flaky test rate from 2.1% to 0.4% in one quarter without changing the retry policy.",
+      "metrics": [
+        {"value": "2.1%", "meaning": "flaky test rate, before"},
+        {"value": "0.4%", "meaning": "flaky test rate, after", "period": "one quarter"}
+      ],
+      "skills": ["pytest", "GitLab CI/CD"],
+      "tags": ["flaky-tests", "reliability", "ci"],
+      "used_in": [
+        {"resume_id": "senior-sdet", "quote": "Cut the flaky test rate from 2.1% to 0.4%"}
+      ],
+      "sources": ["master_cv"],
+      "confidence": "stated",
+      "verified": true,
+      "notes": ""
+    },
+    {
+      "id": "f-002",
+      "role_id": "acme-senior-sdet",
+      "type": "built",
+      "claim": "Built a FastAPI mock service for third-party APIs used by the whole test suite.",
+      "metrics": [],
+      "skills": ["FastAPI", "Python"],
+      "tags": ["mocking", "test-infrastructure"],
+      "used_in": [],
+      "sources": ["master_cv"],
+      "confidence": "stated",
+      "verified": true,
+      "notes": ""
+    },
+    {
+      "id": "f-003",
+      "role_id": "globex-qa-engineer",
+      "type": "achievement",
+      "claim": "Reduced the regression suite run time from three hours to one hour by refactoring C# NUnit tests.",
+      "metrics": [
+        {"value": "three hours", "meaning": "regression run time, before"},
+        {"value": "one hour", "meaning": "regression run time, after"}
+      ],
+      "skills": ["C#", "NUnit"],
+      "tags": ["performance", "test-automation"],
+      "used_in": [
+        {"resume_id": "qa-platform", "quote": "Reduced the regression suite run time from three hours to one hour"}
+      ],
+      "sources": ["master_cv"],
+      "confidence": "stated",
+      "verified": false,
+      "notes": ""
+    }
+  ],
+  "skills": [
+    {"name": "Python", "aliases": [], "category": "Development", "recency": "current", "evidence": ["f-002"]},
+    {"name": "pytest", "aliases": [], "category": "Testing", "recency": "current", "evidence": ["f-001"]},
+    {"name": "FastAPI", "aliases": [], "category": "Development", "recency": "current", "evidence": ["f-002"]},
+    {"name": "GitLab CI/CD", "aliases": ["GitLab CI"], "category": "Delivery and tooling", "recency": "current", "evidence": ["f-001"]},
+    {"name": "Kubernetes", "aliases": ["k8s"], "category": "Delivery and tooling", "recency": "previous", "evidence": []},
+    {"name": "C#", "aliases": ["C#/.NET"], "category": "Development", "recency": "previous", "evidence": ["f-003"]},
+    {"name": "NUnit", "aliases": [], "category": "Testing", "recency": "previous", "evidence": ["f-003"]}
+  ],
+  "education": [
+    {"id": "edu-001", "title": "ISTQB Certified Tester Foundation Level (CTFL) v4.0", "issuer": "ISTQB", "date": "2024-01"}
+  ]
+}

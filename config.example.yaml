@@ -1,0 +1,27 @@
+# Copy to config.yaml (git-ignored) and fill in.
+
+# Google Drive folder where tailored copies go. A subfolder per company is created inside.
+# The id is the last part of the folder URL: https://drive.google.com/drive/folders/<id>
+output_folder_id: "<drive-folder-id>"
+
+# Verified fact base built with prompts/build_facts.md
+facts_path: docs/facts.json
+
+# Second-model review of each edit: auto (use codex if installed) | codex | none
+second_reviewer: auto
+
+# How many times the AI may fix a plan rejected by validators
+max_ai_retries: 2
+
+# Validator limits (characters / ratios to the original block). Defaults shown.
+limits:
+  bullet_max_chars: 220
+  bullet_replace_max_ratio: 1.15
+  intro_max_ratio: 1.15
+  summary_min_ratio: 0.80
+  summary_max_ratio: 1.15
+  title_max_chars: 80
+  skills_line_max_ratio: 1.20
+  max_bullets_per_role: 10
+  max_ops_per_plan: 12
+  total_editable_max_ratio: 1.05

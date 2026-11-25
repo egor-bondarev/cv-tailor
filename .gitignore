@@ -1,0 +1,25 @@
+# Google OAuth
+credentials.json
+token.json
+
+# Private data
+facts.json
+facts_report.md
+config.yaml
+resumes.yaml
+runs/
+cache/
+tests/fixtures/private/
+
+# Python
+.venv/
+path/
+__pycache__/
+*.pyc
+
+# Editor / OS
+.vscode/
+.DS_Store
+
+# Agent workspaces
+.superpowers/
