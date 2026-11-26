@@ -104,6 +104,18 @@ def _new_len(block: Block, op: Op) -> int:
     return 0
 
 
+def max_chars(b: Block, lim: Limits) -> int | None:
+    """Longest allowed new text for a replace of block `b` (whole paragraph; skills: whole line)."""
+    n = len(b.text)
+    return {
+        "bullet": min(lim.bullet_max_chars, int(lim.bullet_replace_max_ratio * n)),
+        "intro": int(lim.intro_max_ratio * n),
+        "summary": int(lim.summary_max_ratio * n),
+        "title": lim.title_max_chars,
+        "skills": int(lim.skills_line_max_ratio * n),
+    }.get(b.kind)
+
+
 def _check_lengths(op: Op, b: Block, lim: Limits) -> list[str]:
     out = []
     if op.op == "insert_after":
@@ -165,7 +177,7 @@ def _per_op(op: Op, ctx: PlanContext) -> list[CheckError]:
         elif fid not in verified:
             err("evidence", f"fact {fid} is not verified")
     ev = [verified[f] for f in op.evidence if f in verified]
-    if op.op in ("replace", "insert_after") and b.kind in BULLET_KINDS and not op.evidence:
+    if op.op in ("replace", "insert_after") and b.kind in BULLET_KINDS | {"title", "summary"} and not op.evidence:
         err("evidence", f"{op.op} of {b.kind} {b.id} needs evidence")
     if b.kind in BULLET_KINDS and b.company and b.role and op.op != "delete":
         role_id = ctx.roles.get((b.company, b.role))
@@ -217,8 +229,11 @@ def _plan_level(ops: list[Op], ctx: PlanContext) -> list[CheckError]:
     orig_total = sum(len(b.text) for b in editable)
     new_total = sum(_new_len(b, by_target[b.id]) if b.id in by_target else len(b.text) for b in editable)
     new_total += sum(len(op.new_text) for op in ops if op.op == "insert_after")
-    if orig_total and new_total > lim.total_editable_max_ratio * orig_total:
-        errs.append(CheckError(rule="structure", detail=f"editable text grows to {new_total / orig_total:.0%} (limit {lim.total_editable_max_ratio:.0%})"))
+    budget = int(lim.total_editable_max_ratio * orig_total)
+    if orig_total and new_total > budget:
+        errs.append(CheckError(rule="structure", detail=(
+            f"editable text would be {new_total} chars, budget {budget} ({new_total - budget} chars over); "
+            "shorten texts or drop an edit")))
     return errs
 
 

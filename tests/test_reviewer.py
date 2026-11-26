@@ -13,7 +13,7 @@ def cfg(**kw):
 
 def test_resolve_auto_without_binary():
     assert resolve_reviewer(cfg(), which=lambda name: None) is None
-    assert resolve_reviewer(cfg(), which=lambda name: "/bin/codex") == ["codex", "exec", "-"]
+    assert resolve_reviewer(cfg(), which=lambda name: "/bin/codex") == ["codex", "exec", "--skip-git-repo-check", "-s", "read-only", "-"]
 
 
 def test_resolve_none():

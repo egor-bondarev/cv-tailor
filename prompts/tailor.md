@@ -26,13 +26,14 @@ Exactly one JSON object `{"ops": [...]}`. Each op has an integer `id` (unique, a
 
 ## Rules
 1. **Facts only.** Every statement in `new_text` must follow from the facts in `evidence`. Respect each fact's `notes`: they limit wording (for example "maintained, not created"). Never make a verb stronger than the fact ("participated" never becomes "led").
-2. **Role.** `evidence` of a bullet or intro edit must belong to that block's role (`role_id` = the block's role). Summary, title and skills may use facts from any role.
-3. **Numbers.** Any token that starts with a digit — `42%`, `2.5M`, `180+`, `3x`, `200ms`, `10` — and number words two…twelve must equal a value in the `metrics` of the evidence facts (for `replace`, a number already in that block's text is also allowed). Do not round, convert or combine numbers. If unsure, write the sentence without the number.
-4. **Group related facts.** Facts in one group are one bullet: combine them in one `replace` or one `insert_after`, do not make a bullet per fact.
-5. **No repeats.** A fact listed in `covered_by` for a block you are not replacing or deleting must not appear in another edit. If a fact is already in a bullet, strengthen that bullet with `replace` instead of adding a new one. One fact appears in at most one bullet edit.
-6. **Skills lines.** Keep existing items unless they are irrelevant; new items must come from the skills vocabulary and have `basic: true` or `has_verified_evidence: true`. Skills with `recency: previous` go after "previous experience with".
-7. **Limits.** Respect `limits`: bullet length, replace ratio of the original `chars`, summary 80–115%, number of ops, bullets per role, total growth.
-8. **Never** change dates, employers, job titles, contacts or education; they are not editable.
-9. **Style.** Match the existing bullets: past tense for finished work, present tense for current ownership, no first person, one sentence, no trailing marketing words.
-10. **Fewer, better edits.** Prioritise score-3 blocks and must_have requirements. Delete only score-0 bullets, and only when the role keeps enough bullets. It is fine to return few ops.
+2. **Evidence everywhere.** Every `replace` of a bullet, intro, summary or title and every `insert_after` lists the facts that back its new claims in `evidence`.
+3. **Role.** `evidence` of a bullet or intro edit must belong to that block's role (`role_id` = the block's role). Summary, title and skills may use facts from any role.
+4. **Numbers.** Any token that starts with a digit — `42%`, `2.5M`, `180+`, `3x`, `200ms`, `10` — and number words two…twelve must equal a value in the `metrics` of the evidence facts (for `replace`, a number already in that block's text is also allowed). Do not round, convert or combine numbers. If unsure, write the sentence without the number.
+5. **Group related facts.** Facts in one group are one bullet: combine them in one `replace` or one `insert_after`, do not make a bullet per fact.
+6. **No repeats.** A fact listed in `covered_by` for a block you are not replacing or deleting must not appear in another edit. If a fact is already in a bullet, strengthen that bullet with `replace` instead of adding a new one. One fact appears in at most one bullet edit.
+7. **Skills lines.** Keep existing items unless they are irrelevant; new items must come from the skills vocabulary and have `basic: true` or `has_verified_evidence: true`. Skills with `recency: previous` go after "previous experience with".
+8. **Limits.** Each block has `max_chars` for a replacement; new bullets are limited by `bullet_max_chars`. The sum of all editable text after your edits must stay within `editable_total_max` from `Length budget`: count it before answering, and pay for new bullets by shortening or deleting low-relevance text.
+9. **Never** change dates, employers, job titles in role headings, contacts or education; they are not editable. The `title` block is the target-role headline under your name and may be adapted.
+10. **Style.** Match the existing bullets: past tense for finished work, present tense for current ownership, no first person, one sentence, no trailing marketing words.
+11. **Fewer, better edits.** Prioritise score-3 blocks and must_have requirements. Delete only score-0 bullets, and only when the role keeps enough bullets. It is fine to return few ops.
 11. If `Errors from previous attempt` is present, fix each listed error and keep the ops that were valid.

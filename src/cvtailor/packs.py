@@ -9,7 +9,7 @@ from cvtailor.config import ResumeConfig
 from cvtailor.facts import groups
 from cvtailor.models import Op
 from cvtailor.schemas import Analysis, Vacancy
-from cvtailor.validate import BULLET_KINDS, PlanContext
+from cvtailor.validate import BULLET_KINDS, PlanContext, max_chars
 
 
 def _json(obj) -> str:
@@ -35,6 +35,7 @@ def _blocks(ctx: PlanContext, with_limits: bool = False) -> tuple[list[dict], li
                 item["role"] = f"{b.company}/{b.role}"
             if with_limits:
                 item["chars"] = len(b.text)
+                item["max_chars"] = max_chars(b, ctx.limits)
             editable.append(item)
         elif b.id.startswith(("h.", "exp.", "early.")):
             context.append({"id": b.id, "text": b.text})
@@ -82,11 +83,19 @@ def tailor_pack(vacancy: Vacancy, analysis: Analysis, ctx: PlanContext, errors: 
         f"# covered_by\n\n{_json({k: v for k, v in ctx.covered.items() if k in cset})}",
         f"# Skills vocabulary\n\n{_json(skills)}",
         f"# Limits\n\n{_json(ctx.limits.model_dump())}",
+        "# Length budget\n\nSum of all editable blocks after your edits (replaced texts, minus deleted bullets, plus new bullets) "
+        "must not exceed `editable_total_max`.\n\n" + _json(_budget(ctx)),
     ]
     if errors:
         parts.append("# Errors from previous attempt\n\nFix every error below; keep the operations that were fine.\n\n"
                      + _json([e.model_dump() for e in errors]))
     return "\n\n".join(parts) + "\n"
+
+
+def _budget(ctx: PlanContext) -> dict:
+    total = sum(len(b.text) for b in ctx.resume.blocks if b.editable)
+    return {"editable_total_chars": total, "editable_total_max": int(ctx.limits.total_editable_max_ratio * total),
+            "summary_min_chars": int(ctx.limits.summary_min_ratio * next((len(b.text) for b in ctx.resume.blocks if b.kind == "summary"), 0))}
 
 
 def review_pack(ops: list[Op], ctx: PlanContext) -> str:

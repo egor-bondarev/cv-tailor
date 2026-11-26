@@ -77,7 +77,7 @@ def test_config_limits_defaults_and_override(repo):
     (repo / "config.yaml").write_text(yaml.safe_dump({"output_folder_id": "out", "limits": {"bullet_max_chars": 200}}))
     cfg = load_config(repo)
     assert cfg.limits.bullet_max_chars == 200 and cfg.limits.max_ops_per_plan == 12
-    assert cfg.reviewer_command == ["codex", "exec", "-"]
+    assert cfg.reviewer_command == ["codex", "exec", "--skip-git-repo-check", "-s", "read-only", "-"]
 
 
 def test_resume_role_map_field(repo):

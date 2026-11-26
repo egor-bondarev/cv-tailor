@@ -65,3 +65,9 @@ def test_prompts_reference_schema_fields():
         assert field in tailor, field
     for op in ("replace", "replace_skills", "insert_after", "delete"):
         assert op in tailor
+
+
+def test_tailor_pack_has_char_budget_and_block_max():
+    ctx = ctx_for()
+    pack = tailor_pack(vac(), Analysis(requirements=[], relevance=[], candidate_facts=[]), ctx, [])
+    assert "editable_total_chars" in pack and "editable_total_max" in pack and '"max_chars"' in pack

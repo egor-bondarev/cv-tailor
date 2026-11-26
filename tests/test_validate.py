@@ -187,3 +187,16 @@ def test_fact_claims_do_not_protect_numbers():
     assert not any("27001" in p for p in ctx.protected if p != "ISO 27001") or True
     errs = validate_ops([Op(id=1, op="replace", block=B1, new_text="Cut CI time by AWS 30% too.", evidence=["f-001"])], ctx)
     assert "numbers" in rules(errs)
+
+
+def test_structure_total_error_reports_chars_over():
+    ctx = ctx_for(limits=Limits(bullet_replace_max_ratio=10, total_editable_max_ratio=1.0))
+    errs = validate_ops([Op(id=1, op="replace", block=B1, new_text="Built plugin one, now longer.", evidence=["f-001"])], ctx)
+    assert any(e.rule == "structure" and "over" in e.detail for e in errs)
+
+
+def test_evidence_required_for_title_and_summary():
+    ctx = ctx_for()
+    for block, text in (("title", "Senior SDET | Platform"), ("summary", "Senior SDET with 10 years in testing.")):
+        errs = validate_ops([Op(id=1, op="replace", block=block, new_text=text)], ctx)
+        assert "evidence" in rules(errs), block

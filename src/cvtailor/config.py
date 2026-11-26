@@ -32,7 +32,7 @@ class Config(BaseModel):
     second_reviewer: str = "auto"
     max_ai_retries: int = 2
     limits: Limits = Limits()
-    reviewer_command: list[str] = ["codex", "exec", "-"]
+    reviewer_command: list[str] = ["codex", "exec", "--skip-git-repo-check", "-s", "read-only", "-"]
     reviewer_timeout_s: int = 100
 
 
