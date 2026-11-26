@@ -25,7 +25,7 @@ Write exactly one JSON object to the output file, nothing else:
 
 ## Rules
 - `language`: language of the original posting (ISO code). Everything else is in English.
-- `must_have`: explicit requirements ("required", "must", "you have"). At least one. Keep each item short and atomic; split "Python and Go" into two only if they are separate requirements.
+- `must_have`: explicit requirements ("required", "must", "you have"). At least one. Keep each item short and atomic. **Split composite requirements**: "pytest and BDD frameworks" becomes two items, so a missing half shows up as its own gap. Keep alternatives together ("Go, Java or Python" stays one item).
 - `nice_to_have`: "plus", "nice to have", "preferred".
 - `skills`: every technology, tool, method mentioned, as written (normalisation happens later).
 - `company`, `seniority`, `domain`: `null` if not stated.

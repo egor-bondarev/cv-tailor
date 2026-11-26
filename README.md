@@ -111,7 +111,7 @@ cvtailor final                                   # after you accepted/rejected s
 | M0 | Docs API experiments: copy, edit, suggestions mode, OAuth | done |
 | M1 | Fact base: `facts.json` + `facts check` | done |
 | M2 | `google_api`, parser, request builder, `verify`, `final` | done |
-| M3 | Run state machine, AI step prompts, validators, second-model review, reports | planned |
+| M3 | Run state machine, AI step prompts, validators, second-model review, reports | done |
 | M4 | Agent skill, end-to-end run | planned |
 
 Later: a fully scripted `cvtailor run` (AI steps via a headless agent CLI), page-count check, an HTML review page.

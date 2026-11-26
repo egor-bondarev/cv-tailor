@@ -121,3 +121,11 @@ def test_prompts_have_adjacent_technology_rule():
 
 def test_tailor_prompt_has_summary_showcase_rule():
     assert "Summary is the showcase" in (PROMPTS / "tailor.md").read_text()
+
+
+def test_prompts_have_measurement_findings_rules():
+    extract = (PROMPTS / "extract.md").read_text()
+    tailor = (PROMPTS / "tailor.md").read_text()
+    assert "Split composite requirements" in extract
+    assert "fact's own verb" in tailor
+    assert "Check lengths before answering" in tailor
