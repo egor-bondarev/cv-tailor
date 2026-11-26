@@ -88,7 +88,9 @@ The parser expects a Google Doc with this structure (other layouts will fail lou
 
 ## Usage
 
-An agent drives a run; you answer its questions and review the result in Google Docs.
+**With Claude Code (recommended).** Open Claude Code in the repository root and paste a vacancy: "tailor my resume to this vacancy at Acme: …". The project skill [`.claude/skills/cv-tailor/SKILL.md`](.claude/skills/cv-tailor/SKILL.md) drives the CLI below, asks you to pick a resume when unsure, and gives you the link to the copy. Review the suggestions in Google Docs, then say "done" and it runs the final check. Other agents can follow the same file as instructions.
+
+**By hand.** An agent (or you) drives a run; you answer its questions and review the result in Google Docs.
 
 ```bash
 cvtailor init --company "Acme" < vacancy.txt   # add --resume ID to skip resume choice
@@ -112,7 +114,7 @@ cvtailor final                                   # after you accepted/rejected s
 | M1 | Fact base: `facts.json` + `facts check` | done |
 | M2 | `google_api`, parser, request builder, `verify`, `final` | done |
 | M3 | Run state machine, AI step prompts, validators, second-model review, reports | done |
-| M4 | Agent skill, end-to-end run | planned |
+| M4 | Agent skill, end-to-end run | done |
 
 Later: a fully scripted `cvtailor run` (AI steps via a headless agent CLI), page-count check, an HTML review page.
 

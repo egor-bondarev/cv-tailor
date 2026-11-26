@@ -9,7 +9,7 @@ from cvtailor.config import ResumeConfig
 from cvtailor.facts import groups
 from cvtailor.models import Op
 from cvtailor.schemas import Analysis, Vacancy
-from cvtailor.validate import BULLET_KINDS, PlanContext, max_chars
+from cvtailor.validate import BULLET_KINDS, PlanContext, max_chars, split_skill_items
 
 
 def _compact(obj) -> str:
@@ -154,6 +154,24 @@ def _budget(ctx: PlanContext) -> dict:
             "summary_min_chars": int(ctx.limits.summary_min_ratio * next((len(b.text) for b in ctx.resume.blocks if b.kind == "summary"), 0))}
 
 
+def _new_skill_backing(orig_value: str, new_value: str, ctx: PlanContext) -> list[dict]:
+    """For each skills item that is new in the line: whether it is basic or which verified facts back it."""
+    verified = ctx.verified
+    existing = {i.casefold() for i, _ in split_skill_items(orig_value)}
+    index = {n.casefold(): s for s in ctx.facts.skills for n in (s.name, *s.aliases)}
+    out = []
+    for item, previous in split_skill_items(new_value):
+        if item.casefold() in existing:
+            continue
+        skill = index.get(item.casefold())
+        entry = {"item": item, "previous_experience": previous}
+        if skill is not None:
+            entry["basic"] = skill.basic
+            entry["evidence"] = [_fact(verified[e]) for e in skill.evidence if e in verified]
+        out.append(entry)
+    return out
+
+
 def review_pack(ops: list[Op], ctx: PlanContext) -> str:
     verified = ctx.verified
     items = []
@@ -168,4 +186,6 @@ def review_pack(ops: list[Op], ctx: PlanContext) -> str:
             "evidence": [_fact(verified[f], full=True) for f in op.evidence if f in verified],
             "reason": op.reason,
         })
+        if op.op == "replace_skills":
+            items[-1]["new_items"] = _new_skill_backing(b.text[b.text.index(": ") + 2:], op.new_value, ctx)
     return f"# Edits to review\n\n{_json(items)}\n"

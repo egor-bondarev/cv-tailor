@@ -129,3 +129,14 @@ def test_prompts_have_measurement_findings_rules():
     assert "Split composite requirements" in extract
     assert "fact's own verb" in tailor
     assert "Check lengths before answering" in tailor
+
+
+def test_review_pack_skills_shows_new_item_backing():
+    ctx = ctx_for()
+    pack = review_pack([Op(id=1, op="replace_skills", block="skills.development", new_value="Python, FastAPI, Git")], ctx)
+    assert '"new_items"' in pack and "FastAPI" in pack and "f-001" in pack and '"basic":true' in pack
+
+
+def test_tailor_prompt_explains_skills_item_parsing():
+    tailor = (PROMPTS / "tailor.md").read_text()
+    assert "exact vocabulary names" in tailor and '" and "' in tailor

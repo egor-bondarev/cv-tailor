@@ -397,7 +397,7 @@ Evidence: f-001 «Cut the flaky test rate…» · Reason: must_have "CI reliabil
 ```text
 cv-tailor/
 ├── DESIGN.md
-├── SKILL.md                   # цикл: cvtailor next → выполнить действие → next
+├── .claude/skills/cv-tailor/SKILL.md  # цикл: cvtailor next → выполнить действие → next
 ├── docs/google-setup.md
 ├── prompts/
 │   ├── build_facts.md         # сборка facts.json (готов)
@@ -436,7 +436,7 @@ cv-tailor/
 | M1 ✅ | `facts.json` по `prompts/build_facts.md` + `facts check` (готово 2026-11-25) | Конфликты решены; факты текущей компании `verified: true`; все цитаты `used_in` находятся |
 | M2 | `google_api`, `parse`, `requests`, `verify`, `final`, `naming` (план: [docs/plans/m2.md](docs/plans/m2.md)) | Три резюме парсятся; `build` + `verify` повторяют результат спайка из 10.3 (сам механизм уже подтверждён); после ручного принятия всех предложений проходит `final` |
 | M3 ✅ | `state`/`next`, `packs`, валидаторы, `reviewer`, `report`, промпты ИИ-шагов (план: [docs/plans/m3.md](docs/plans/m3.md), журнал: [docs/plans/m3-runs.md](docs/plans/m3-runs.md)) | Выполнено 2026-11-26: 5 калибровочных и 3 измерительных прогона; на замере 8/8 правок приняты без изменений, 0 отброшено, 0 неподтверждённых |
-| M4 | `SKILL.md`, сквозной прогон | Вакансия в чате → ссылка на документ с предложениями; ручные шаги только выбор резюме при неуверенности и ревью в Docs |
+| M4 ✅ | `SKILL.md` (`.claude/skills/cv-tailor/`), сквозной прогон | Выполнено 2026-11-26: прогон в свежей сессии через `/cv-tailor` — вакансия → ссылка, ручные шаги только выбор резюме и ревью; 8/8 правок приняты |
 
 M1 и M2 независимы, M3 зависит от обоих.
 
