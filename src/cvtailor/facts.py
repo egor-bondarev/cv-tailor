@@ -108,7 +108,8 @@ def _metric_text(facts: list[Fact]) -> str:
     return " | ".join(m.value for f in facts for m in f.metrics)
 
 
-def check_facts(facts: FactsFile, resumes: dict[str, ParsedResume] | None) -> FactsReport:
+def check_facts(facts: FactsFile, resumes: dict[str, ParsedResume] | None, partial: bool = False) -> FactsReport:
+    """`partial=True`: `resumes` is a subset; used_in entries for other resumes are not checked."""
     problems: list[str] = []
     warnings: list[str] = []
     ids = [f.id for f in facts.facts]
@@ -143,7 +144,7 @@ def check_facts(facts: FactsFile, resumes: dict[str, ParsedResume] | None) -> Fa
         warnings.append(f"{len(unverified)} facts not verified (not used for edits): {', '.join(unverified[:20])}")
 
     if resumes is not None:
-        _check_against_resumes(facts, resumes, problems, warnings)
+        _check_against_resumes(facts, resumes, problems, warnings, partial)
 
     stats = {"facts": len(facts.facts), "verified": len(facts.facts) - len(unverified),
              "roles": len(facts.roles), "skills": len(facts.skills)}
@@ -151,12 +152,14 @@ def check_facts(facts: FactsFile, resumes: dict[str, ParsedResume] | None) -> Fa
 
 
 def _check_against_resumes(
-    facts: FactsFile, resumes: dict[str, ParsedResume], problems: list[str], warnings: list[str]
+    facts: FactsFile, resumes: dict[str, ParsedResume], problems: list[str], warnings: list[str], partial: bool = False
 ) -> None:
     covering: dict[tuple[str, str], list[Fact]] = {}
     for f in facts.facts:
         for u in f.used_in:
             resume = resumes.get(u.resume_id)
+            if resume is None and partial:
+                continue
             if resume is None:
                 problems.append(f"{f.id}: used_in refers to unknown resume {u.resume_id!r}")
                 continue
@@ -179,3 +182,101 @@ def _check_against_resumes(
                     problems.append(
                         f"{rid}/{b.id}: number {tok!r} not in metrics of covering facts {[f.id for f in fs]}"
                     )
+
+
+# --- indexes used by AI steps and validators (M3) -------------------------------
+
+class RoleMapError(ValueError):
+    pass
+
+
+def verified_facts(facts: FactsFile) -> dict[str, Fact]:
+    return {f.id: f for f in facts.facts if f.verified}
+
+
+def coverage(facts: FactsFile, resume_id: str, resume: ParsedResume) -> dict[str, list[str]]:
+    """fact id -> bullet/intro blocks of this resume that already state it (verified facts only)."""
+    blocks = [b for b in resume.blocks if b.kind in COVERABLE_KINDS]
+    out: dict[str, list[str]] = {}
+    for f in verified_facts(facts).values():
+        hits = [b.id for u in f.used_in if u.resume_id == resume_id for b in blocks if u.quote in b.text]
+        if hits:
+            out[f.id] = sorted(set(hits), key=hits.index)
+    return out
+
+
+def groups(facts: FactsFile) -> list[list[str]]:
+    """Verified facts that share a used_in quote are usually told as one bullet."""
+    parent: dict[str, str] = {}
+
+    def find(x: str) -> str:
+        while parent.setdefault(x, x) != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    by_quote: dict[tuple[str, str], list[str]] = {}
+    for f in verified_facts(facts).values():
+        for u in f.used_in:
+            by_quote.setdefault((u.resume_id, u.quote), []).append(f.id)
+    for ids in by_quote.values():
+        for other in ids[1:]:
+            parent[find(other)] = find(ids[0])
+    comps: dict[str, set[str]] = {}
+    for ids in by_quote.values():
+        for i in ids:
+            comps.setdefault(find(i), set()).add(i)
+    return sorted((sorted(c) for c in comps.values() if len(c) > 1), key=lambda c: c[0])
+
+
+def _tokens(s: str) -> list[str]:
+    from cvtailor.naming import slug
+    return slug(s).split("-")
+
+
+def _prefix_match(a: list[str], b: list[str]) -> bool:
+    n = min(len(a), len(b))
+    return n > 0 and a[:n] == b[:n]
+
+
+def role_map(facts: FactsFile, resume: ParsedResume, overrides: dict[str, str]) -> dict[tuple[str, str], str]:
+    """(company slug, role slug) of editable blocks -> facts role_id."""
+    role_ids = {r.id for r in facts.roles}
+    pairs = sorted({(b.company, b.role) for b in resume.blocks
+                    if b.editable and b.kind in COVERABLE_KINDS and b.company and b.role})
+    out: dict[tuple[str, str], str] = {}
+    errors: list[str] = []
+    for company, role in pairs:
+        key = f"{company}/{role}"
+        if key in overrides:
+            if overrides[key] not in role_ids:
+                errors.append(f"{key}: override points to unknown role {overrides[key]!r}")
+            else:
+                out[(company, role)] = overrides[key]
+            continue
+        ct, rt = company.split("-"), role.split("-")
+        same_company = [
+            r for r in facts.roles
+            if _prefix_match(ct, _tokens(r.employer)) or _prefix_match(ct, _tokens(r.employer.split("/")[0]))
+        ]
+        exact = [r for r in same_company if _tokens(r.title) == rt]
+        cands = exact or [r for r in same_company if _prefix_match(rt, _tokens(r.title))]
+        if len(cands) == 1:
+            out[(company, role)] = cands[0].id
+        else:
+            found = ", ".join(r.id for r in cands) or "none"
+            errors.append(f"{key}: {'ambiguous' if cands else 'no'} matching facts role (candidates: {found})")
+    if errors:
+        raise RoleMapError(
+            "cannot map resume roles to facts.json roles; add role_map entries to resumes.yaml:\n  "
+            + "\n  ".join(errors)
+        )
+    return out
+
+
+def normalize_skills(names: list[str], facts: FactsFile) -> list[str]:
+    canon = {}
+    for s in facts.skills:
+        for n in [s.name, *s.aliases]:
+            canon.setdefault(n.casefold(), s.name)
+    return [canon.get(n.casefold(), n) for n in names]

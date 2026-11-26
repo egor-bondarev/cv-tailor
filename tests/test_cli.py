@@ -70,3 +70,59 @@ def test_facts_check_online_quote_problem(repo, capsys, monkeypatch, resume_doc)
 
 def test_usage_without_args(capsys):
     assert cli.main([]) == 2
+
+
+def test_config_limits_defaults_and_override(repo):
+    assert load_config(repo).limits.bullet_max_chars == 220
+    (repo / "config.yaml").write_text(yaml.safe_dump({"output_folder_id": "out", "limits": {"bullet_max_chars": 200}}))
+    cfg = load_config(repo)
+    assert cfg.limits.bullet_max_chars == 200 and cfg.limits.max_ops_per_plan == 12
+    assert cfg.reviewer_command == ["codex", "exec", "-"]
+
+
+def test_resume_role_map_field(repo):
+    (repo / "resumes.yaml").write_text(yaml.safe_dump([{"id": "cv", "label": "L", "doc_id": "d", "role_map": {"acme/x": "r"}}]))
+    assert load_resumes(repo)[0].role_map == {"acme/x": "r"}
+
+
+def _setup_run_repo(repo):
+    from test_state import facts_obj
+    (repo / "docs" / "facts.json").write_text(facts_obj().model_dump_json())
+    (repo / "prompts").mkdir(exist_ok=True)
+
+
+def test_init_creates_run_and_current(repo, monkeypatch, capsys):
+    import io
+    monkeypatch.setattr("sys.stdin", io.StringIO("We need an SDET"))
+    assert cli.main(["init", "--company", "Acme", "--repo", str(repo)]) == 0
+    name = (repo / "runs" / ".current").read_text()
+    assert (repo / "runs" / name / "vacancy.txt").read_text() == "We need an SDET"
+    assert name in capsys.readouterr().out
+
+
+def test_init_unknown_resume_errors(repo, monkeypatch, capsys):
+    import io
+    monkeypatch.setattr("sys.stdin", io.StringIO("text"))
+    assert cli.main(["init", "--company", "Acme", "--resume", "nope", "--repo", str(repo)]) == 1
+    assert "unknown resume" in capsys.readouterr().out
+
+
+def test_next_prints_single_json_line(repo, monkeypatch, capsys):
+    import io
+    _setup_run_repo(repo)
+    monkeypatch.setattr("sys.stdin", io.StringIO("We need an SDET"))
+    cli.main(["init", "--company", "Acme", "--repo", str(repo)])
+    capsys.readouterr()
+    assert cli.main(["next", "--repo", str(repo)]) == 0
+    out = capsys.readouterr().out.strip().splitlines()
+    assert len(out) == 1 and json.loads(out[0])["action"] == "ai"
+
+
+def test_final_without_copy_says_so(repo, monkeypatch, capsys):
+    import io
+    _setup_run_repo(repo)
+    monkeypatch.setattr("sys.stdin", io.StringIO("We need an SDET"))
+    cli.main(["init", "--company", "Acme", "--repo", str(repo)])
+    capsys.readouterr()
+    assert cli.main(["final", "--repo", str(repo)]) == 1
+    assert "no copy" in capsys.readouterr().out

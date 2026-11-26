@@ -13,6 +13,11 @@ second_reviewer: auto
 # How many times the AI may fix a plan rejected by validators
 max_ai_retries: 2
 
+# Second reviewer command (prompt on stdin, runs in an empty temp dir) and timeout.
+# Keep the timeout below your agent's shell command timeout (often 120 s).
+reviewer_command: [codex, exec, "-"]
+reviewer_timeout_s: 100
+
 # Validator limits (characters / ratios to the original block). Defaults shown.
 limits:
   bullet_max_chars: 220

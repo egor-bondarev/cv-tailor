@@ -131,3 +131,10 @@ def test_check_without_resumes_skips_quote_checks():
     data["facts"][0]["used_in"][0]["quote"] = "anything"
     report = check_facts(load_facts(data), None)
     assert report.problems == []
+
+
+def test_check_partial_skips_other_resumes(resumes):
+    data = facts_data()
+    data["facts"][0]["used_in"].append({"resume_id": "other", "quote": "x"})
+    assert check_facts(load_facts(data), resumes, partial=True).problems == []
+    assert check_facts(load_facts(data), resumes).problems

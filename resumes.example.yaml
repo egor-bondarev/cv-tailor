@@ -6,6 +6,8 @@
   doc_id: "<google-doc-id>"
   target_role: Senior SDET, Python test frameworks and developer tooling
   editable_companies: [acme]         # slugs of Heading 2 companies whose bullets may be edited
+  # role_map:                        # only if a role heading cannot be matched to facts.json automatically
+  #   acme/senior-sdet: acme-senior-sdet
 
 - id: qa-platform
   label: QA Platform Engineer
