@@ -66,6 +66,18 @@ The parser expects a Google Doc with this structure (other layouts will fail lou
    cp resumes.example.yaml resumes.yaml
    ```
 
+   - `config.yaml`: `output_folder_id` is the Drive folder for tailored copies (the id at the end of the folder URL). Limits and the reviewer command have working defaults.
+   - `resumes.yaml`: one entry per base resume:
+
+     | Field | Meaning |
+     |---|---|
+     | `id` | short name used in runs and in `facts.json` `used_in` |
+     | `label` | used in the copy name `<label> - <Company> - <date>` |
+     | `doc_id` | the part of the Google Doc URL between `/d/` and `/edit` |
+     | `target_role` | which roles this resume is for; used to pick the resume |
+     | `editable_companies` | employers (Heading 2, as a slug: `Acme Analytics` → `acme-analytics`) whose bullets may be edited; everything else stays read-only. Usually only the current employer |
+     | `role_map` | optional; only if `cvtailor facts check` or a run reports that a role heading cannot be matched to a `facts.json` role: `acme/senior-sdet: acme-senior-sdet` |
+
 3. **Fact base.** Build `docs/facts.json` from your master CV with [prompts/build_facts.md](prompts/build_facts.md). Read every fact and set `verified: true` on the correct ones. Only verified facts are ever used. The schema is shown in [facts.example.json](facts.example.json). Then check it against your resumes:
 
    ```bash
@@ -73,6 +85,18 @@ The parser expects a Google Doc with this structure (other layouts will fail lou
    cvtailor facts check            # schema, references, numbers, quotes found in the live resumes
    cvtailor facts check --offline  # without reading Google Docs
    ```
+
+## Usage
+
+An agent drives a run; you answer its questions and review the result in Google Docs.
+
+```bash
+cvtailor init --company "Acme" < vacancy.txt   # add --resume ID to skip resume choice
+cvtailor next                                    # repeat; prints one JSON action per call
+cvtailor final                                   # after you accepted/rejected suggestions in Docs
+```
+
+`next` returns `ai` (write JSON for a prompt), `ask_user` (answer with `--answer`), `say`, `auth` (run `cvtailor login`) or `done`. `cvtailor next --from STEP` restarts from a step.
 
 ## Privacy
 

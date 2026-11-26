@@ -3,7 +3,7 @@
 Compare the vacancy with the chosen resume copy and the verified fact base. You decide what matters; the next step will write edits.
 
 ## Input
-`analyze.pack.md`: vacancy JSON, editable resume blocks (`id`, `kind`, `text`, `role`), read-only context, verified facts (`id`, `role_id`, `type`, `claim`, `metrics`, `notes`), `groups` (facts usually told as one bullet), `covered_by` (fact → blocks that already state it).
+`analyze.pack.md`: vacancy JSON, editable resume blocks (`id`, `kind`, `text`, `role`), read-only context, verified facts grouped by `## role_id`, one per line (`id | type | claim | metrics | note`), `groups` (facts usually told as one bullet), `covered_by` (fact → editable blocks that already state it).
 
 ## Output
 Exactly one JSON object:
@@ -36,4 +36,6 @@ Exactly one JSON object:
   - 1 — weakly related;
   - 0 — unrelated to this vacancy.
 - `candidate_facts`: facts worth using in edits for this vacancy: supporting `in_facts` and `partial` requirements, and facts that could strengthen score-3 blocks. Use only ids from the verified facts list. Prefer whole `groups` when one member is relevant.
+- **Adjacent technologies.** If the vacancy asks for X and the facts show a close equivalent Y from the same family (Selenium ↔ Playwright, Jenkins ↔ GitLab CI, JMeter ↔ k6, Jira ↔ other Atlassian tools), mark the requirement `partial` (or `in_facts` if Y is not in the resume yet) with the Y fact ids, and add those facts to `candidate_facts`.
+- A fact's `note` limits **how** it may be worded, not **whether** it may be used. A fact noted as "did not enter regular use" can still be cited as exactly that.
 - Never treat a `gap` as covered. Never invent experience.

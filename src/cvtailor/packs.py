@@ -12,8 +12,56 @@ from cvtailor.schemas import Analysis, Vacancy
 from cvtailor.validate import BULLET_KINDS, PlanContext, max_chars
 
 
+def _compact(obj) -> str:
+    return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+
+
 def _json(obj) -> str:
-    return "```json\n" + json.dumps(obj, ensure_ascii=False, indent=2) + "\n```"
+    """Compact JSON; a list puts one item per line so it stays readable."""
+    if isinstance(obj, list) and obj:
+        body = "[\n" + ",\n".join(_compact(x) for x in obj) + "\n]"
+    elif isinstance(obj, dict) and obj:
+        body = "{\n" + ",\n".join(f"{_compact(k)}:{_compact(v)}" for k, v in obj.items()) + "\n}"
+    else:
+        body = _compact(obj)
+    return "```json\n" + body + "\n```"
+
+
+def _fact_line(f) -> str:
+    metrics = "; ".join(m.value for m in f.metrics)
+    line = f"{f.id} | {f.type} | {f.claim}"
+    if metrics:
+        line += f" | metrics: {metrics}"
+    if f.notes:
+        line += f" | note: {f.notes}"
+    return line
+
+
+def _covered_editable(ctx: PlanContext, only: set[str] | None = None) -> dict:
+    editable = {b.id for b in ctx.resume.blocks if b.editable}
+    out = {}
+    for fid, blocks in ctx.covered.items():
+        if only is not None and fid not in only:
+            continue
+        kept = [b for b in blocks if b in editable]
+        if kept:
+            out[fid] = kept
+    return out
+
+
+def _skills_lines(ctx: PlanContext) -> str:
+    verified = ctx.verified
+    by_cat: dict[str, list[str]] = {}
+    for s in ctx.facts.skills:
+        marks = []
+        if any(e in verified for e in s.evidence):
+            marks.append("ev")
+        if s.basic:
+            marks.append("basic")
+        if s.recency == "previous":
+            marks.append("prev")
+        by_cat.setdefault(s.category or "Other", []).append(s.name + (f" [{', '.join(marks)}]" if marks else ""))
+    return "\n".join(f"{cat}: {', '.join(items)}" for cat, items in by_cat.items())
 
 
 def _fact(f, full: bool = False) -> dict:
@@ -53,14 +101,18 @@ def route_pack(vacancy: Vacancy, resumes: list[tuple[ResumeConfig, str]]) -> str
 
 def analyze_pack(vacancy: Vacancy, ctx: PlanContext) -> str:
     editable, context = _blocks(ctx)
-    facts = [_fact(f) for f in ctx.verified.values()]
+    by_role: dict[str, list[str]] = {}
+    for f in ctx.verified.values():
+        by_role.setdefault(f.role_id, []).append(_fact_line(f))
+    facts = "\n\n".join(f"## {role}\n" + "\n".join(lines) for role, lines in by_role.items())
     return (
         f"# Vacancy\n\n{_json(vacancy.model_dump())}\n\n"
         f"# Editable resume blocks\n\n{_json(editable)}\n\n"
         f"# Read-only resume context\n\n{_json(context)}\n\n"
-        f"# Verified facts\n\n{_json(facts)}\n\n"
+        "# Verified facts\n\nGrouped by `## role_id`; one per line: `id | type | claim | metrics | note`.\n\n"
+        f"{facts}\n\n"
         f"# groups (facts usually told as one bullet)\n\n{_json(groups(ctx.facts))}\n\n"
-        f"# covered_by (fact -> blocks that already state it)\n\n{_json(ctx.covered)}\n"
+        f"# covered_by (fact -> editable blocks that already state it)\n\n{_json(_covered_editable(ctx))}\n"
     )
 
 
@@ -70,25 +122,29 @@ def tailor_pack(vacancy: Vacancy, analysis: Analysis, ctx: PlanContext, errors: 
     cset = set(cands)
     grp = [[i for i in g if i in cset] for g in groups(ctx.facts)]
     grp = [g for g in grp if len(g) > 1]
-    skills = [{"name": s.name, "aliases": s.aliases, "basic": s.basic, "recency": s.recency,
-               "has_verified_evidence": any(e in verified for e in s.evidence)} for s in ctx.facts.skills]
     editable, context = _blocks(ctx, with_limits=True)
-    parts = [
+    slim = analysis.model_copy(update={"candidate_facts": cands}).model_dump()
+    for r in slim["relevance"]:
+        r.pop("reason", None)
+    parts = []
+    if errors:
+        parts.append("# Errors from previous attempt\n\nFix every error below; keep the operations that were fine. "
+                     "The rest of this input is unchanged from the previous attempt.\n\n"
+                     + _json([e.model_dump() for e in errors]))
+    parts += [
         f"# Vacancy\n\n{_json(vacancy.model_dump())}",
-        f"# Analysis\n\n{_json(analysis.model_copy(update={'candidate_facts': cands}).model_dump())}",
+        f"# Analysis\n\n{_json(slim)}",
         f"# Editable resume blocks\n\n{_json(editable)}",
         f"# Read-only resume context\n\n{_json(context)}",
         f"# Candidate facts (verified)\n\n{_json([_fact(verified[i], full=True) for i in cands])}",
         f"# groups within candidates\n\n{_json(grp)}",
-        f"# covered_by\n\n{_json({k: v for k, v in ctx.covered.items() if k in cset})}",
-        f"# Skills vocabulary\n\n{_json(skills)}",
+        f"# covered_by\n\n{_json(_covered_editable(ctx, cset))}",
+        "# Skills vocabulary\n\nOne line per category. Marks: `ev` has verified evidence, `basic` everyday tool, "
+        "`prev` previous experience only. A new skills item needs `ev` or `basic`.\n\n" + _skills_lines(ctx),
         f"# Limits\n\n{_json(ctx.limits.model_dump())}",
         "# Length budget\n\nSum of all editable blocks after your edits (replaced texts, minus deleted bullets, plus new bullets) "
         "must not exceed `editable_total_max`.\n\n" + _json(_budget(ctx)),
     ]
-    if errors:
-        parts.append("# Errors from previous attempt\n\nFix every error below; keep the operations that were fine.\n\n"
-                     + _json([e.model_dump() for e in errors]))
     return "\n\n".join(parts) + "\n"
 
 
@@ -107,7 +163,8 @@ def review_pack(ops: list[Op], ctx: PlanContext) -> str:
             "op": op.id, "kind": op.op, "block": b.id,
             "before": b.text if op.op != "insert_after" else None,
             "anchor": b.text if op.op == "insert_after" else None,
-            "after": op.new_text if op.op in ("replace", "insert_after") else op.new_value,
+            "after": op.new_text if op.op in ("replace", "insert_after")
+            else b.text[: b.text.index(": ") + 2] + op.new_value if op.op == "replace_skills" else None,
             "evidence": [_fact(verified[f], full=True) for f in op.evidence if f in verified],
             "reason": op.reason,
         })

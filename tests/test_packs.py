@@ -71,3 +71,53 @@ def test_tailor_pack_has_char_budget_and_block_max():
     ctx = ctx_for()
     pack = tailor_pack(vac(), Analysis(requirements=[], relevance=[], candidate_facts=[]), ctx, [])
     assert "editable_total_chars" in pack and "editable_total_max" in pack and '"max_chars"' in pack
+
+
+def test_packs_use_compact_json():
+    ctx = ctx_for()
+    pack = analyze_pack(vac(), ctx)
+    assert '\n  "' not in pack and '": ' not in pack
+
+
+def test_analyze_facts_are_one_line_each():
+    pack = analyze_pack(vac(), ctx_for())
+    assert "## acme-sdet" in pack and "f-001 | achievement | Built plugin one." in pack
+
+
+def test_analyze_covered_by_only_editable_blocks():
+    from cvtailor.validate import make_context
+    from cvtailor.config import Limits
+    from cvtailor.parse import parse_resume
+    from conftest import resume_elements
+    from docbuilder import doc
+    from test_validate import facts_v
+    import re
+    ctx = ctx_for()
+    pack = analyze_pack(vac(), ctx)
+    section = pack.split("# covered_by")[1]
+    assert "exp.globex" not in section and "early." not in section
+
+
+def test_tailor_errors_first_skills_compact_and_analysis_without_reasons():
+    from cvtailor.schemas import Relevance
+    ctx = ctx_for()
+    analysis = Analysis(requirements=[], relevance=[Relevance(block_id=B1, score=3, reason="SECRET-REASON")], candidate_facts=["f-001"])
+    pack = tailor_pack(vac(), analysis, ctx, [CheckError(rule="numbers", detail="bad number", op=1)])
+    assert pack.startswith("# Errors from previous attempt")
+    assert "SECRET-REASON" not in pack
+    assert "Development: " in pack and "Python [ev]" in pack and "Kubernetes [prev]" in pack and "ISO 27001 [basic]" in pack
+
+
+def test_review_pack_skills_after_keeps_label():
+    ctx = ctx_for()
+    pack = review_pack([Op(id=1, op="replace_skills", block="skills.development", new_value="Python, Go")], ctx)
+    assert '"after":"Development: Python, Go"' in pack
+
+
+def test_prompts_have_adjacent_technology_rule():
+    assert "Adjacent technologies" in (PROMPTS / "analyze.md").read_text()
+    assert "Adjacent technologies" in (PROMPTS / "tailor.md").read_text()
+
+
+def test_tailor_prompt_has_summary_showcase_rule():
+    assert "Summary is the showcase" in (PROMPTS / "tailor.md").read_text()
