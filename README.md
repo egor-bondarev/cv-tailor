@@ -88,17 +88,19 @@ The parser expects a Google Doc with this structure (other layouts will fail lou
 
 ## Usage
 
-**With Claude Code (recommended).** Open Claude Code in the repository root and paste a vacancy: "tailor my resume to this vacancy at Acme: …". The project skill [`.claude/skills/cv-tailor/SKILL.md`](.claude/skills/cv-tailor/SKILL.md) drives the CLI below, asks you to pick a resume when unsure, and gives you the link to the copy. Review the suggestions in Google Docs, then say "done" and it runs the final check. Other agents can follow the same file as instructions.
+**With Claude Code (recommended).** Open Claude Code in the repository root and paste a vacancy: "tailor my resume to this vacancy at Acme: …". The project skill [`.claude/skills/cv-tailor/SKILL.md`](.claude/skills/cv-tailor/SKILL.md) starts `cvtailor run`, which calls the model for every AI step itself (`claude -p`, a fresh small context per step); the chat only relays the resume question and shows the link to the copy. Review the suggestions in Google Docs, then say "done" and it runs the final check. Other agents can follow the same file as instructions.
 
-**By hand.** An agent (or you) drives a run; you answer its questions and review the result in Google Docs.
+**From a terminal.**
 
 ```bash
-cvtailor init --company "Acme" < vacancy.txt   # add --resume ID to skip resume choice
-cvtailor next                                    # repeat; prints one JSON action per call
-cvtailor final                                   # after you accepted/rejected suggestions in Docs
+cvtailor run --company "Acme" < vacancy.txt   # add --resume ID to skip resume choice
+cvtailor run --answer 1                         # if it stopped with a question
+cvtailor final                                  # after you accepted/rejected suggestions in Docs
 ```
 
-`next` returns `ai` (write JSON for a prompt), `ask_user` (answer with `--answer`), `say`, `auth` (run `cvtailor login`) or `done`. `cvtailor next --from STEP` restarts from a step.
+`run` stops only when it needs you: a question, the summary, Google sign-in, or `continue` after its time budget (`ai.max_run_seconds`, so a chat agent's shell call does not time out; just run it again). `--non-interactive` takes the top-ranked resume without asking, `--json` prints the stopping action as one JSON line, `--from STEP` restarts from a step. Model calls and their tokens are logged to `runs/<run>/ai_calls.jsonl`.
+
+**Manual mode.** `cvtailor init` + `cvtailor next` hand every AI step to an agent instead: `next` returns `ai` (write JSON for a prompt), `ask_user` (answer with `--answer`), `say`, `auth` or `done`. Useful when no model command is available.
 
 ## Privacy
 

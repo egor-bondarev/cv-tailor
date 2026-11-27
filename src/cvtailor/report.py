@@ -27,6 +27,7 @@ class ReportData(BaseModel):
     review: Review | None
     reviewer_status: str
     verify: VerifyReport
+    notes: list[str] = []
 
 
 def _gaps(d: ReportData) -> list[str]:
@@ -104,6 +105,7 @@ def summary_txt(d: ReportData) -> str:
     if flagged:
         lines.append("Check carefully: " + "; ".join(f"op {v.op} {v.verdict} «{v.quote}»" for v in flagged))
     lines.append(f"reviewer: {d.reviewer_status}")
+    lines += [f"Note: {n}" for n in d.notes]
     if not d.verify.ok:
         lines.append(f"Verify FAILED, copy renamed [FAILED]: {'; '.join(d.verify.problems[:2])}")
     lines.append("Accept or reject every suggestion in Google Docs before sending the resume.")

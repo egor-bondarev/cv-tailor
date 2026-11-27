@@ -42,7 +42,7 @@ AUTH_TEXT = "Google sign-in is required: run `cvtailor login` (it opens a browse
 
 
 class Action(BaseModel):
-    action: Literal["ai", "ask_user", "say", "auth", "done"]
+    action: Literal["ai", "ask_user", "say", "auth", "done", "continue"]
     step: str
     prompt: str | None = None
     input: str | None = None
@@ -73,6 +73,7 @@ class RunState(BaseModel):
     copy_url: str | None = None
     copy_revision: str | None = None
     review_round: int = 0
+    notes: list[str] = []
     apply_started: bool = False
     applied: bool = False
 
@@ -447,6 +448,7 @@ class Runner:
             resume=self.ctx().resume, facts=self.d.facts,
             review=Review.model_validate(review_raw["review"]) if review_raw["review"] else None,
             reviewer_status=review_raw["status"], verify=VerifyReport.model_validate(self.read("verify.json")),
+            notes=self.s.notes,
         )
         (self.run / "review.md").write_text(review_md(data))
         text = summary_txt(data)

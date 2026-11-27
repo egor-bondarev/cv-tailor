@@ -1,4 +1,4 @@
-"""cvtailor command line: facts check, init, next, final, login."""
+"""cvtailor command line: facts check, init, next, run, final, login."""
 
 from __future__ import annotations
 
@@ -103,6 +103,50 @@ def cmd_next(repo: Path, run: str | None, answer: str | None, from_step: str | N
     return _print_action(next_action(state, deps, answer=answer, from_step=from_step))
 
 
+def _ask_terminal(act) -> str | None:
+    print(act.question, file=sys.stderr)
+    for i, opt in enumerate(act.options, 1):
+        print(f"  {i}) {opt}", file=sys.stderr)
+    try:
+        return input("answer> ").strip() or None
+    except EOFError:
+        return None
+
+
+def _print_human(act) -> None:
+    if act.action == "ask_user":
+        print(act.question)
+        print(f"Answer with `cvtailor run --answer <number>`: "
+              + ", ".join(f"{i}) {o}" for i, o in enumerate(act.options, 1)))
+    else:
+        print(act.text or act.action)
+
+
+def cmd_run(repo: Path, company: str | None, resume: str | None, run: str | None, answer: str | None,
+            from_step: str | None, non_interactive: bool, as_json: bool) -> int:
+    from datetime import date
+    from cvtailor.autorun import run_until_stop
+    from cvtailor.state import Action, init_run
+    try:
+        deps = _deps(repo)
+        if company:
+            run_dir = Path(init_run(repo, company, sys.stdin.read(), resume, deps.resumes, date.today()).run_dir)
+        else:
+            run_dir = _run_dir(repo, run)
+    except (ConfigError, FactsError, FileNotFoundError) as exc:
+        act = Action(action="say", step="config", text=f"ERROR: {exc}")
+        _print_action(act) if as_json else print(act.text)
+        return 1
+    interactive = not as_json and not non_interactive and sys.stdin.isatty()
+    act = run_until_stop(run_dir, deps, answer=answer, from_step=from_step,
+                         ask=_ask_terminal if interactive else None, auto_answer=non_interactive,
+                         log=lambda m: print(f"[cvtailor] {m}", file=sys.stderr, flush=True))
+    if as_json:
+        return _print_action(act)
+    _print_human(act)
+    return 0
+
+
 def cmd_final(repo: Path, run: str | None) -> int:
     import json
     from cvtailor.models import Op
@@ -161,6 +205,15 @@ def main(argv: list[str] | None = None) -> int:
     nxt.add_argument("--answer")
     nxt.add_argument("--from", dest="from_step")
     nxt.add_argument("--repo", default=".")
+    rn = sub.add_parser("run", help="run the pipeline, calling the model for every AI step, until it needs you")
+    rn.add_argument("--company", help="start a new run for this company; vacancy text on stdin")
+    rn.add_argument("--resume", help="with --company: skip routing and use this resume id")
+    rn.add_argument("--run", help="continue this run folder (default: the current run)")
+    rn.add_argument("--answer", help="answer to the pending question")
+    rn.add_argument("--from", dest="from_step")
+    rn.add_argument("--non-interactive", action="store_true", help="never ask: take the top-ranked option")
+    rn.add_argument("--json", dest="as_json", action="store_true", help="print the stopping action as one JSON line")
+    rn.add_argument("--repo", default=".")
     fin = sub.add_parser("final", help="check the copy after you resolved all suggestions in Google Docs")
     fin.add_argument("--run")
     fin.add_argument("--repo", default=".")
@@ -174,6 +227,9 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_init(Path(args.repo), args.company, args.resume)
     if args.group == "next":
         return cmd_next(Path(args.repo), args.run, args.answer, args.from_step)
+    if args.group == "run":
+        return cmd_run(Path(args.repo), args.company, args.resume, args.run, args.answer, args.from_step,
+                       args.non_interactive, args.as_json)
     if args.group == "final":
         return cmd_final(Path(args.repo), args.run)
     if args.group == "login":
