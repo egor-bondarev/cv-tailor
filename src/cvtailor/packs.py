@@ -81,6 +81,7 @@ def _blocks(ctx: PlanContext, with_limits: bool = False) -> tuple[list[dict], li
             item = {"id": b.id, "kind": b.kind, "text": b.text}
             if b.kind in BULLET_KINDS:
                 item["role"] = f"{b.company}/{b.role}"
+                item["priority"] = b.priority or 1
             if with_limits:
                 item["chars"] = len(b.text)
                 item["max_chars"] = max_chars(b, ctx.limits)

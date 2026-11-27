@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 from cvtailor.checks import CheckError
 from cvtailor.config import Limits
-from cvtailor.facts import Fact, FactsFile, coverage, role_map, verified_facts
+from cvtailor.facts import COVERABLE_KINDS, Fact, FactsFile, coverage, role_map, verified_facts
 from cvtailor.models import Block, BuildError, Op, ParsedResume
 from cvtailor.numbers import metric_tokens, number_tokens, protected_names
 from cvtailor.requests import check_ops
@@ -36,9 +36,13 @@ def make_context(resume: ParsedResume, facts: FactsFile, resume_id: str, limits:
                  overrides: dict[str, str]) -> PlanContext:
     skill_names = [n for s in facts.skills for n in (s.name, *s.aliases)]
     texts = [b.text for b in resume.blocks]
+    roles = role_map(facts, resume, overrides)
+    for b in resume.blocks:  # older roles without facts stay as they are
+        if b.editable and b.kind in COVERABLE_KINDS and b.company and b.role and (b.company, b.role) not in roles:
+            b.editable, b.priority = False, None
     return PlanContext(
         resume=resume, facts=facts, resume_id=resume_id, limits=limits,
-        roles=role_map(facts, resume, overrides),
+        roles=roles,
         covered=coverage(facts, resume_id, resume),
         protected=protected_names(skill_names, texts),
     )
@@ -211,6 +215,15 @@ def _plan_level(ops: list[Op], ctx: PlanContext) -> list[CheckError]:
     if len(ops) > lim.max_ops_per_plan:
         errs.append(CheckError(rule="structure", detail=f"{len(ops)} ops > limit {lim.max_ops_per_plan}"))
     by_target = {op.target: op for op in ops if op.op != "insert_after"}
+    past: dict[str, int] = {}
+    for op in sorted(ops, key=lambda o: o.id):
+        b = resume.get(op.target)
+        if (b.priority or 1) >= 2:
+            past[b.company] = past.get(b.company, 0) + 1
+            if past[b.company] > lim.max_ops_per_past_company:
+                errs.append(CheckError(rule="priority", op=op.id, detail=(
+                    f"{b.company} is an older role (priority {b.priority}): at most {lim.max_ops_per_past_company} "
+                    "edit(s) there; keep the one that matters most for the vacancy")))
     roles: dict[tuple, int] = {}
     for b in resume.blocks:
         if b.kind == "bullet" and b.editable and not b.nesting:

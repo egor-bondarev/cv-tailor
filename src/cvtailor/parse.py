@@ -18,9 +18,22 @@ def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
+def company_priority(spec: list[str] | dict[str, int], company: str, index: int, earlier_unlisted: int) -> int:
+    """Edit priority of the `index`-th EXPERIENCE company (0 = most recent); 0 means read-only."""
+    if isinstance(spec, dict):
+        return max(0, int({slug(k): v for k, v in spec.items()}.get(company, 0)))
+    listed = {slug(c) for c in spec}
+    if listed:
+        return 1 if company in listed else 2 + earlier_unlisted
+    return 1 if index < 2 else index
+
+
 class _Parser:
-    def __init__(self, editable_companies: list[str]):
-        self.editable = {slug(c) for c in editable_companies}
+    def __init__(self, editable_companies: list[str] | dict[str, int]):
+        self.spec = editable_companies
+        self.exp_companies: list[str] = []
+        self.unlisted = 0
+        self.priority = 0
         self.blocks: list[Block] = []
         self.section: str | None = None
         self.sections_seen: set[str] = set()
@@ -97,6 +110,12 @@ class _Parser:
         elif style == "HEADING_2" and self.section in EXPERIENCE_PREFIX:
             prefix = EXPERIENCE_PREFIX[self.section]
             self.company = self.unique(prefix, slug(text.split("|")[0]))
+            self.priority = 0
+            if prefix == "exp":
+                self.priority = company_priority(self.spec, self.company, len(self.exp_companies), self.unlisted)
+                if isinstance(self.spec, list) and self.spec and self.company not in {slug(c) for c in self.spec}:
+                    self.unlisted += 1
+                self.exp_companies.append(self.company)
             self.role = None
             self._reset_role()
         elif style == "HEADING_3" and self.section in EXPERIENCE_PREFIX and self.company:
@@ -109,8 +128,8 @@ class _Parser:
             sec = slug(self.section)
             return self.add(f"ro.{sec}.{self.next_no('ro.' + sec):02d}", "readonly", p, text, **list_kw)
         base = f"{prefix}.{self.company}" + (f".{self.role}" if self.role else "")
-        owner = {"company": self.company, "role": self.role}
-        can_edit = prefix == "exp" and self.company in self.editable and self.role is not None
+        can_edit = prefix == "exp" and self.priority > 0 and self.role is not None
+        owner = {"company": self.company, "role": self.role, **({"priority": self.priority} if can_edit else {})}
         if self.role is None and p.list_id is None and not self.seen_bullet:
             return self.add(f"{base}.desc{self.next_no(base + '.desc'):02d}", "readonly", p, text, **owner)
         if p.list_id is None:
@@ -128,7 +147,7 @@ class _Parser:
         self.last_bullet = self.blocks[-1]
 
 
-def parse_resume(doc: dict, editable_companies: list[str]) -> ParsedResume:
+def parse_resume(doc: dict, editable_companies: list[str] | dict[str, int]) -> ParsedResume:
     doc = load_doc(doc)
     pending = has_suggestions(doc)
     if pending:

@@ -240,10 +240,14 @@ def _prefix_match(a: list[str], b: list[str]) -> bool:
 
 
 def role_map(facts: FactsFile, resume: ParsedResume, overrides: dict[str, str]) -> dict[tuple[str, str], str]:
-    """(company slug, role slug) of editable blocks -> facts role_id."""
+    """(company slug, role slug) of editable blocks -> facts role_id.
+
+    A role of an older company (priority >= 2) with no facts role is left out instead of failing;
+    the caller makes its blocks read-only."""
     role_ids = {r.id for r in facts.roles}
-    pairs = sorted({(b.company, b.role) for b in resume.blocks
-                    if b.editable and b.kind in COVERABLE_KINDS and b.company and b.role})
+    prio = {(b.company, b.role): b.priority or 1 for b in resume.blocks
+            if b.editable and b.kind in COVERABLE_KINDS and b.company and b.role}
+    pairs = sorted(prio)
     out: dict[tuple[str, str], str] = {}
     errors: list[str] = []
     for company, role in pairs:
@@ -263,6 +267,8 @@ def role_map(facts: FactsFile, resume: ParsedResume, overrides: dict[str, str]) 
         cands = exact or [r for r in same_company if _prefix_match(rt, _tokens(r.title))]
         if len(cands) == 1:
             out[(company, role)] = cands[0].id
+        elif not cands and prio[(company, role)] >= 2:
+            continue
         else:
             found = ", ".join(r.id for r in cands) or "none"
             errors.append(f"{key}: {'ambiguous' if cands else 'no'} matching facts role (candidates: {found})")

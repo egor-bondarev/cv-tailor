@@ -140,3 +140,10 @@ def test_review_pack_skills_shows_new_item_backing():
 def test_tailor_prompt_explains_skills_item_parsing():
     tailor = (PROMPTS / "tailor.md").read_text()
     assert "exact vocabulary names" in tailor and '" and "' in tailor
+
+
+def test_packs_show_block_priority():
+    from test_validate import globex_ctx
+    ctx = globex_ctx()
+    pack = analyze_pack(Vacancy(**VAC), ctx)
+    assert '"id":"exp.globex.qa.b01"' in pack and '"priority":2' in pack and '"priority":1' in pack

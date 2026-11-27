@@ -28,6 +28,7 @@ class Block(BaseModel):
     nesting: int | None = None
     has_children: bool = False
     at_boundary: bool = False
+    priority: int | None = None  # editable experience blocks: 1 = recent roles, 2+ = older
 
 
 class ParsedResume(BaseModel):
