@@ -26,6 +26,7 @@ review_fix_rounds: 1
 # your agent's shell timeout minus ai.timeout_s). Defaults shown.
 ai:
   command: [claude, -p, --model, "{model}", --output-format, json, --tools, "", --no-session-persistence, --strict-mcp-config,
+            --setting-sources, project,
             --system-prompt, "You are one step of a scripted pipeline. Follow the step instructions in the user message. You cannot read or write files: answer with exactly one JSON object and nothing else."]
   models: {extract: sonnet, route: sonnet, analyze: sonnet, tailor: opus}
   default_model: sonnet

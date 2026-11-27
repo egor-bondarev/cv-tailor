@@ -100,7 +100,12 @@ def cmd_next(repo: Path, run: str | None, answer: str | None, from_step: str | N
     except (ConfigError, FactsError, FileNotFoundError) as exc:
         _print_action(Action(action="say", step="config", text=f"ERROR: {exc}"))
         return 1
-    return _print_action(next_action(state, deps, answer=answer, from_step=from_step))
+    from cvtailor.state import LOCKED_TEXT, RunLocked, run_lock
+    try:
+        with run_lock(state.path):
+            return _print_action(next_action(state, deps, answer=answer, from_step=from_step))
+    except RunLocked:
+        return _print_action(Action(action="say", step=state.step, text=LOCKED_TEXT))
 
 
 def _ask_terminal(act) -> str | None:

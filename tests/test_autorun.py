@@ -91,3 +91,30 @@ def test_time_budget_returns_continue(env):
     assert act.action == "continue" and "run `cvtailor run` again" in act.text
     act = run_until_stop(Path(state.run_dir), deps, call=FakeModel(ANSWERS))
     assert act.action == "say" and "2 edits applied" in act.text
+
+
+def test_fenced_answers_are_stored_as_clean_json(env):
+    deps = env.make()
+    state = start(env, deps)
+
+    class Fenced(FakeModel):
+        def __call__(self, step, prompt, inp, out, errors, settings):
+            rec = super().__call__(step, prompt, inp, out, errors, settings)
+            out.write_text("Here is the plan:\n```json\n" + out.read_text() + "\n```\n")
+            return rec
+
+    act = run_until_stop(Path(state.run_dir), deps, call=Fenced(ANSWERS))
+    assert act.action == "say" and "2 edits applied" in act.text
+    json.loads(Path(state.run_dir, "analysis.json").read_text())
+
+
+def test_second_process_on_same_run_is_refused(env):
+    from cvtailor.state import run_lock
+    deps = env.make()
+    state = start(env, deps)
+    model = FakeModel(ANSWERS)
+    with run_lock(Path(state.run_dir)):
+        act = run_until_stop(Path(state.run_dir), deps, call=model)
+    assert act.action == "say" and "another cvtailor process" in act.text and model.calls == []
+    act = run_until_stop(Path(state.run_dir), deps, call=model)
+    assert act.action == "say" and "2 edits applied" in act.text

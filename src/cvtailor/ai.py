@@ -12,6 +12,7 @@ import re
 import subprocess
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -23,7 +24,8 @@ SYSTEM_PROMPT = ("You are one step of a scripted pipeline. Follow the step instr
 
 class AiSettings(BaseModel):
     command: list[str] = ["claude", "-p", "--model", "{model}", "--output-format", "json", "--tools", "",
-                          "--no-session-persistence", "--strict-mcp-config", "--system-prompt", SYSTEM_PROMPT]
+                          "--no-session-persistence", "--strict-mcp-config", "--setting-sources", "project",
+                          "--system-prompt", SYSTEM_PROMPT]
     models: dict[str, str] = {"extract": "sonnet", "route": "sonnet", "analyze": "sonnet", "tailor": "opus"}
     default_model: str = "sonnet"
     timeout_s: int = 240
@@ -32,6 +34,7 @@ class AiSettings(BaseModel):
 
 class CallRecord(BaseModel):
     step: str
+    at: str = ""
     model: str
     ok: bool
     error: str = ""
@@ -88,7 +91,8 @@ def call_model(step: str, prompt_path: Path, input_path: Path, output_path: Path
         previous = prev.read_text() if prev else None
     message = build_message(prompt_path.read_text(), input_path.read_text(), previous)
     command = [part.replace("{model}", model) for part in settings.command]
-    rec = CallRecord(step=step, model=model, ok=False, retry=errors, input_chars=len(message))
+    rec = CallRecord(step=step, model=model, ok=False, retry=errors, input_chars=len(message),
+                     at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
     started = clock()
     try:
         with tempfile.TemporaryDirectory(prefix="cvtailor-ai-") as cwd:

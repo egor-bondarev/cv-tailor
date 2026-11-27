@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Callable
 
 from cvtailor.ai import CallRecord, call_model
-from cvtailor.state import Action, Deps, RunState, next_action
+from cvtailor.state import LOCKED_TEXT, Action, Deps, RunLocked, RunState, next_action, run_lock
 
 CONTINUE_TEXT = ("Progress saved after {s:.0f}s (time budget per call is {b}s); "
                  "run `cvtailor run` again to continue.")
@@ -26,6 +26,14 @@ def run_until_stop(
 ) -> Action:
     """Returns the first action that needs a person: a question (unless `ask` or `auto_answer` handles it),
     a message, sign-in, the end of the run, or `continue` when the time budget is spent."""
+    try:
+        with run_lock(run_dir):
+            return _loop(run_dir, deps, answer, from_step, ask, auto_answer, log, call, clock)
+    except RunLocked:
+        return Action(action="say", step=RunState.load(run_dir).step, text=LOCKED_TEXT)
+
+
+def _loop(run_dir, deps, answer, from_step, ask, auto_answer, log, call, clock) -> Action:
     settings = deps.cfg.ai
     call = call or call_model
     started = clock()

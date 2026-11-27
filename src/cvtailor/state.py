@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import shutil
+from contextlib import contextmanager
 import subprocess
 from dataclasses import dataclass, field
 from datetime import date
@@ -119,6 +121,28 @@ def init_run(repo: Path, company: str, vacancy_text: str, forced_resume: str | N
     return state
 
 
+class RunLocked(Exception):
+    pass
+
+
+LOCKED_TEXT = ("another cvtailor process is working on this run (a terminal or another chat session); "
+               "wait for it to finish, then run the command again")
+
+
+@contextmanager
+def run_lock(run_dir: Path):
+    """One process per run: a second `run`/`next` on the same folder stops instead of racing."""
+    with open(Path(run_dir) / ".lock", "w") as f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RunLocked(LOCKED_TEXT) from None
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
 class _Blocked(Exception):
     def __init__(self, text: str):
         self.text = text
@@ -197,6 +221,8 @@ class Runner:
             return issue(self.s.errors)
         obj, errors = load_ai_json(out, model)
         if obj is not None:
+            # the answer may carry prose or code fences around the JSON: keep only the parsed object
+            out.write_text(obj.model_dump_json(indent=2))
             result, errors = judge(obj)
             if not errors:
                 self.s.awaiting = None

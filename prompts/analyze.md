@@ -30,7 +30,10 @@ Exactly one JSON object:
   - `in_facts` — not in the resume, but a verified fact supports it (give `fact_ids`);
   - `partial` — adjacent experience only (give the closest ids);
   - `gap` — nothing supports it; no ids.
-  - An item that lists members of one family ("AWS (SES, SNS, SQS)") is `covered`/`in_facts` only if the facts back the members; if only some are backed, it is `partial` with those ids, and name the missing members in `notes`.
+  - Lists inside an item come in two kinds:
+    - **examples or alternatives** of one kind of tool or skill ("CI/CD tools (Jenkins, GitHub Actions, GitLab CI)", "Java, Python or C#", "modern frameworks (Playwright, Selenium, Cypress)"): one backed member, or a close equivalent of the same kind, covers the item (`covered`/`in_facts`); only an adjacent tool makes it `partial`;
+    - **components the role works with** ("AWS (EKS, S3, SES, SNS, SQS)", "Kubernetes networking (ingress, services, load balancers)"): `covered`/`in_facts` only if the facts back most members; if only some are, `partial` with those ids.
+    In both cases name the missing members in `notes`.
 - `relevance`: score every editable block whose `kind` is `bullet` or `intro`, exactly once:
   - 3 — directly addresses a must_have;
   - 2 — addresses a nice_to_have or closely related work;
@@ -40,3 +43,4 @@ Exactly one JSON object:
 - **Adjacent technologies.** If the vacancy asks for X and the facts show a close equivalent Y from the same family (Selenium ↔ Playwright, Jenkins ↔ GitLab CI, JMeter ↔ k6, Jira ↔ other Atlassian tools), mark the requirement `partial` (or `in_facts` if Y is not in the resume yet) with the Y fact ids, and add those facts to `candidate_facts`.
 - A fact's `note` limits **how** it may be worded, not **whether** it may be used. A fact noted as "did not enter regular use" can still be cited as exactly that.
 - Never treat a `gap` as covered. Never invent experience.
+- Write `notes` and every `reason` in English.
