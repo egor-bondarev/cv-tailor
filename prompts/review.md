@@ -13,6 +13,8 @@ For a skills-line edit (`kind: replace_skills`), `evidence` is empty by design: 
 ## Checklist for each edit
 - Everything in `after` follows from the evidence claims; nothing is added or generalised; no stronger verb than the facts ("participated" → "led" is not allowed).
 - Every number is used with the same meaning and period as in `metrics` (a count of runs is not a count of users).
+- A result stated as a situation ("failures fell from A to B") is not turned into the candidate's action ("cut failures from A to B") or caused by another claim ("fixes that cut …") unless a fact says so.
+- When `after` joins several facts, it adds no link between them that the facts do not state (cause, "with", "using", shared scope).
 - Experience from a past role is not presented as current; `notes` constraints are respected.
 
 ## Output

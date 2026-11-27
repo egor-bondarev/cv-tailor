@@ -33,7 +33,7 @@ Run `"$CVT" next` and read the one-line JSON it prints. Do what `action` says, t
 
 | `action` | What you do |
 |---|---|
-| `ai` | Read the whole file at `prompt`, then the file at `input`. Write **only** the JSON object the prompt specifies to the path in `output` (no prose, no code fences). Then call `next`. |
+| `ai` | Read the whole file at `prompt`, then the file at `input`, each with your file-reading tool (not `cat`: the input is often 25–30 KB and shell output gets cut). Write **only** the JSON object the prompt specifies to the path in `output` (no prose, no code fences). Then call `next`. |
 | `ask_user` | Show `question` and the numbered `options` to the user and stop. When they answer, run `"$CVT" next --answer "<their answer or option number>"`. |
 | `say` | Show `text` to the user verbatim. If it is the run summary (starts with `Resume copy:`), go to step 3. If it reports a problem, explain it in one or two sentences and stop; do not retry on your own unless the text tells you to run `next` again. |
 | `auth` | Tell the user to run `cvtailor login` (it opens a browser for Google sign-in) and to tell you when done; then call `next`. |
@@ -44,6 +44,8 @@ Run `"$CVT" next` and read the one-line JSON it prints. Do what `action` says, t
 - The prompt is the contract: field names, allowed values and rules come from it. Every claim must come from the facts in the input; respect each fact's `note`; keep the fact's own verb and numbers.
 - `tailor`: before writing, check each `new_text` against its block's `max_chars` and the total against `editable_total_max` in `Length budget`.
 - If the action has non-empty `errors`, this is a retry. Read the `Errors from previous attempt` section at the top of the input and your previous answer (the newest `<output>.attemptN` file next to `output`); fix exactly those errors and keep the parts that were fine. Do not re-read the rest of the input if you already have it in context.
+- On a retry the file at `output` **no longer exists**: the CLI renamed your previous answer to `<output>.attemptN`. Write a new `output` file (for example, load the newest `.attemptN`, fix it, save it to `output`), check that it was written, and only then call `next`. Do not chain `next` after a command that may fail.
+- Errors with rule `review` come from the independent fact checker after your plan passed validation: rewrite only the quoted fragments of those ops.
 - Write the file with a heredoc or your file tool; make sure it is valid JSON.
 - Do not read the project's source code (`src/`) to work out a rule: the prompt states the rules and each error message says what to fix.
 

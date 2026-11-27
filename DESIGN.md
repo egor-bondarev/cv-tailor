@@ -280,6 +280,8 @@ Python вызывает `codex exec --skip-git-repo-check -s read-only -` в п�
 
 Вердикт: `supported` / `partial` / `unsupported` с цитатой. Если `codex` не найден или ответ не прошёл схему, шаг помечается `reviewer: none`, прогон продолжается.
 
+Цикл исправления (v2, V0): если есть `partial`/`unsupported`, вердикты возвращаются в tailor как ошибки с правилом `review` (`review_fix_rounds`, по умолчанию 1). Исправленный план снова проходит валидаторы и ревью; если исправление не прошло валидаторы после повторов, остаётся прежний проверенный план. Что не исправилось, попадает в сводку.
+
 ## 9. Google: доступ и клиент
 
 - Авторизация: OAuth-клиент «Desktop app» в собственном проекте Google Cloud, scopes `documents` и `drive`, `credentials.json` и `token.json` в корне репозитория (в `.gitignore`). Настройка: [`docs/google-setup.md`](docs/google-setup.md).
@@ -390,7 +392,7 @@ Evidence: f-001 «Cut the flaky test rate…» · Reason: must_have "CI reliabil
   editable_companies: [acme]
 ```
 
-`config.yaml`: `output_folder_id`, `facts_path` (по умолчанию `docs/facts.json`), `second_reviewer` (`auto` | `codex` | `none`), `max_ai_retries` (2), переопределения лимитов из раздела 8.
+`config.yaml`: `output_folder_id`, `facts_path` (по умолчанию `docs/facts.json`), `second_reviewer` (`auto` | `codex` | `none`), `max_ai_retries` (2), `review_fix_rounds` (1), переопределения лимитов из раздела 8.
 
 ## 14. Структура репозитория
 
@@ -440,13 +442,9 @@ cv-tailor/
 
 M1 и M2 независимы, M3 зависит от обоих.
 
-### Отложено на v2
+### v2
 
-- Полностью скриптовый режим `cvtailor run`: ИИ-шаги через `claude -p` / `codex exec` подпроцессом, без чата.
-- Jev для роутинга и релевантности; размеченная выборка вакансий.
-- Комментарии с обоснованием в документе (Drive API `comments.create`; привязка к тексту в Docs не поддерживается, будут неякорные).
-- Проверка числа страниц (экспорт PDF через Drive API + подсчёт страниц) — с OAuth это несколько строк, но пока не нужно.
-- `review.html`, README для чужих пользователей, правка прошлых мест работы.
+Скоуп и порядок v2 — в [docs/plans/v2-scope.md](docs/plans/v2-scope.md).
 
 ## 16. Риски
 

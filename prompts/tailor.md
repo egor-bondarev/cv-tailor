@@ -26,6 +26,8 @@ Exactly one JSON object `{"ops": [...]}`. Each op has an integer `id` (unique, a
 
 ## Rules
 1. **Facts only.** Every statement in `new_text` must follow from the facts in `evidence`. Respect each fact's `notes`: they limit wording (for example "maintained, not created"). Use the fact's own verb, including in the summary and title: "documented" stays "documented" (not "set"), "participated" never becomes "led".
+   - **Outcome facts are not actions.** A fact of type `scope` states a situation or result ("failures fell from 12% to 5%"), not something the candidate did. Keep it as a result ("infrastructure-related failures fell from 12% to 5%"), never "Cut / Reduced / Improved …", and do not attach it to an action ("fixes that cut …") unless another evidence fact states that link. Action verbs with a result come only from `achievement`, `built` or `leadership` facts that say so.
+   - **No invented links.** When one sentence combines several facts, join them as separate statements ("…; …" or "and"). Do not add a relation the facts do not state: cause ("by", "which reduced", "leading to"), tools ("with", "using", "on top of") or shared scope ("for the same teams").
 2. **Evidence everywhere.** Every `replace` of a bullet, intro, summary or title and every `insert_after` lists the facts that back its new claims in `evidence`.
 3. **Role.** `evidence` of a bullet or intro edit must belong to that block's role (`role_id` = the block's role). Summary, title and skills may use facts from any role.
 4. **Numbers.** Any token that starts with a digit — `42%`, `2.5M`, `180+`, `3x`, `200ms`, `10` — and number words two…twelve must equal a value in the `metrics` of the evidence facts (for `replace`, a number already in that block's text is also allowed). Do not round, convert or combine numbers. If unsure, write the sentence without the number.
@@ -38,4 +40,4 @@ Exactly one JSON object `{"ops": [...]}`. Each op has an integer `id` (unique, a
 11. **Never** change dates, employers, job titles in role headings, contacts or education; they are not editable. The `title` block is the target-role headline under your name and may be adapted.
 12. **Style.** Match the existing bullets: past tense for finished work, present tense for current ownership, no first person, one sentence, no trailing marketing words.
 13. **Fewer, better edits.** Prioritise score-3 blocks and must_have requirements. Delete only score-0 bullets, and only when the role keeps enough bullets. It is fine to return few ops.
-11. If `Errors from previous attempt` is present, fix each listed error and keep the ops that were valid.
+14. If `Errors from previous attempt` is present, fix each listed error and keep the ops that were valid. Errors with rule `review` come from the independent fact checker: rewrite that op so the quoted fragment follows exactly from its evidence facts (or drop the op); do not change ops without errors.

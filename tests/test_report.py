@@ -88,3 +88,14 @@ def test_acceptance_outcomes():
                   para("Inserted, tweaked.", list_id="L1") if _t(e) == "Inserted." else e for e in accepted]
     edited = {o.op: o.outcome for o in acceptance(before, _final(edited_els), ops)}
     assert edited == {1: "edited", 2: "edited", 3: "accepted"}
+
+
+def test_coverage_line_and_weak_match():
+    reqs = [{"text": t, "kind": "must", "status": st} for t, st in
+            [("a", "covered"), ("b", "in_facts"), ("c", "partial"), ("d", "gap"), ("e", "gap")]]
+    an = Analysis(requirements=reqs + [{"text": "n", "kind": "nice", "status": "gap"}], relevance=[], candidate_facts=[])
+    s = summary_txt(data(analysis=an))
+    assert "Must-have coverage: 2/5 backed, 1 partial, 2 gaps — weak match" in s
+    assert "Must-have coverage" in review_md(data(analysis=an))
+    strong = Analysis(requirements=reqs[:3], relevance=[], candidate_facts=[])
+    assert "2/3 backed" in summary_txt(data(analysis=strong)) and "weak" not in summary_txt(data(analysis=strong))

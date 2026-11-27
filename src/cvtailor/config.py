@@ -34,6 +34,7 @@ class Config(BaseModel):
     limits: Limits = Limits()
     reviewer_command: list[str] = ["codex", "exec", "--skip-git-repo-check", "-s", "read-only", "-"]
     reviewer_timeout_s: int = 100
+    review_fix_rounds: int = 1
 
 
 class ResumeConfig(BaseModel):

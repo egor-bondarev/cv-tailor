@@ -33,6 +33,19 @@ def _gaps(d: ReportData) -> list[str]:
     return [r.text for r in d.analysis.requirements if r.kind == "must" and r.status == "gap"]
 
 
+def _coverage(d: ReportData) -> str:
+    """One line on how much of the must-have list the candidate's experience backs."""
+    must = [r for r in d.analysis.requirements if r.kind == "must"]
+    if not must:
+        return ""
+    backed = sum(r.status in ("covered", "in_facts") for r in must)
+    partial = sum(r.status == "partial" for r in must)
+    line = f"Must-have coverage: {backed}/{len(must)} backed, {partial} partial, {len(must) - backed - partial} gaps"
+    if backed * 2 < len(must):
+        line += " — weak match: less than half of the must-haves are backed by your experience"
+    return line + "."
+
+
 def _verdicts(d: ReportData) -> dict[int, object]:
     return {v.op: v for v in d.review.verdicts} if d.review else {}
 
@@ -46,6 +59,8 @@ def review_md(d: ReportData) -> str:
     route = f"{d.route.choice} (confidence: {d.route.confidence})" if d.route else "fixed by user"
     lines.append(f"Doc: {d.doc_url} · Resume: {route}")
     lines.append(f"Must-have gaps: {', '.join(_gaps(d)) or 'none'} · Reviewer: {d.reviewer_status}")
+    if _coverage(d):
+        lines.append(_coverage(d))
     lines.append("")
     for op in d.applied:
         b = d.resume.get(op.target)
@@ -80,6 +95,8 @@ def review_md(d: ReportData) -> str:
 def summary_txt(d: ReportData) -> str:
     lines = [f"Resume copy: {d.doc_url}",
              f"{len(d.applied)} edits applied, {len(d.dropped)} dropped by validators (details in review.md)."]
+    if _coverage(d):
+        lines.append(_coverage(d))
     gaps = _gaps(d)
     if gaps:
         lines.append(f"Must-have gaps (not in your facts): {', '.join(gaps)}")

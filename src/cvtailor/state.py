@@ -72,6 +72,7 @@ class RunState(BaseModel):
     copy_name: str | None = None
     copy_url: str | None = None
     copy_revision: str | None = None
+    review_round: int = 0
     apply_started: bool = False
     applied: bool = False
 
@@ -187,7 +188,7 @@ class Runner:
             if out.exists():
                 out.rename(self._free(out, "stale"))
             self.s.reissues = 0
-            return issue([])
+            return issue(self.s.errors)  # empty, except reviewer findings handed back to tailor
         if not out.exists():
             self.s.reissues += 1
             if self.s.reissues > MAX_REISSUES:
@@ -214,6 +215,15 @@ class Runner:
         return path.with_name(f"{path.name}.{tag}{n}")
 
     def exhausted(self, step: str, errors: list[CheckError]) -> Action | None:
+        prev = self.run / f"plan.round{self.s.review_round - 1}.json"
+        if step == "tailor" and self.s.review_round and prev.exists():
+            # the fix round failed validation: keep the plan that was valid and already reviewed
+            (self.run / "plan.json").write_text(prev.read_text())
+            old = self.read(f"review.round{self.s.review_round - 1}.json")
+            old["status"] += "; fix round rejected by validators, reviewed plan kept"
+            self.write("review.json", old)
+            self.advance("apply")
+            return None
         if step == "tailor" and (self.run / "ops_last.json").exists():
             ops = [Op(**o) for o in self.read("ops_last.json")]
             kept, dropped = split_valid(ops, self.ctx())
@@ -228,6 +238,8 @@ class Runner:
     def save_plan(self, kept: list[Op], dropped: list[tuple[Op, list[CheckError]]]) -> None:
         self.write("plan.json", {"resume_id": self.s.resume_id, "base_revision": self.s.copy_revision,
                                  "ops": [o.model_dump() for o in kept]})
+        if self.s.review_round and not dropped:
+            return  # a fix round keeps the ops dropped before the first review
         self.write("dropped.json", [{"op": o.model_dump(), "errors": [e.model_dump() for e in errs]}
                                     for o, errs in dropped])
 
@@ -360,8 +372,31 @@ class Runner:
         prompt = (self.d.repo / "prompts" / "review.md").read_text()
         review, status = run_review(command, prompt, review_pack(ops, self.ctx()), [o.id for o in ops],
                                     self.d.cfg.reviewer_timeout_s, run=self.d.reviewer_run)
+        flagged = [v for v in review.verdicts if v.verdict != "supported"] if review else []
+        if self.s.review_round:
+            status += f" (after {self.s.review_round} fix round{'s' if self.s.review_round > 1 else ''})"
         self.write("review.json", {"status": status, "review": review.model_dump() if review else None})
+        if flagged and self.s.review_round < self.d.cfg.review_fix_rounds:
+            return self.hand_back_to_tailor(flagged)
         self.advance("apply")
+        return None
+
+    def hand_back_to_tailor(self, flagged) -> None:
+        """Reviewer findings go back to tailor as errors; the fixed plan is validated and reviewed again."""
+        n = self.s.review_round
+        shutil.copyfile(self.run / "plan.json", self.run / f"plan.round{n}.json")
+        shutil.copyfile(self.run / "review.json", self.run / f"review.round{n}.json")
+        out = self.run / AI_FILES["tailor"][2]
+        if out.exists():
+            out.rename(self._free(out, "attempt"))  # the previous answer the retry instructions point to
+        errors = [CheckError(rule="review", op=v.op,
+                             detail=f"independent fact checker: {v.verdict}, «{v.quote}» — {v.comment}".rstrip(" —"))
+                  for v in flagged]
+        self.s.review_round = n + 1
+        self.s.attempts.pop("tailor", None)
+        self.advance("tailor")
+        self.s.errors = errors
+        self.s.save()
         return None
 
     def step_apply(self, answer):
@@ -441,6 +476,8 @@ class Runner:
                 (self.run / name).rename(self._free(self.run / name, "stale"))
         for st in STEPS[STEPS.index(target):]:
             self.s.attempts.pop(st, None)
+        if STEPS.index(target) <= STEPS.index("tailor"):
+            self.s.review_round = 0
         if STEPS.index(target) <= STEPS.index("route"):
             self.s.options, self.s.question = [], None
             self.s.resume_id = self.s.forced_resume

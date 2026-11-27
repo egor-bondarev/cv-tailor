@@ -446,3 +446,72 @@ def test_empty_plan_skips_apply(env):
     a = step(state, deps)
     assert a.action == "say" and "0 edits applied" in a.text
     assert env.client.calls.count("batch_update") == 0
+
+
+def flagging_reviewer(env, deps, answers):
+    """Reviewer that answers from `answers` in order (the last one repeats)."""
+    import subprocess
+
+    def run(cmd, **kw):
+        env.reviews.append(kw)
+        out = answers[min(len(env.reviews), len(answers)) - 1]
+        return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(out), stderr="")
+
+    deps.reviewer_run = run
+    return deps
+
+
+PARTIAL = {"verdicts": [{"op": 1, "verdict": "partial", "quote": "now shared", "comment": "facts do not say shared"}]}
+SUPPORTED = {"verdicts": [{"op": 1, "verdict": "supported"}]}
+FIXED_OPS = {"ops": [{**GOOD_OPS["ops"][0], "new_text": "Built plugin one."}, GOOD_OPS["ops"][1]]}
+
+
+def test_reviewer_findings_go_back_to_tailor_once(env):
+    deps = flagging_reviewer(env, env.make(), [PARTIAL, SUPPORTED])
+    state = start(env, deps)
+    a = run_to_tailor(env, deps, state)
+    write(a, GOOD_OPS)
+    a = step(state, deps)
+    assert a.action == "ai" and a.step == "tailor"
+    assert [(e.rule, e.op) for e in a.errors] == [("review", 1)] and "now shared" in a.errors[0].detail
+    assert "Errors from previous attempt" in Path(a.input).read_text()
+    assert Path(a.output + ".attempt1").exists() and not Path(a.output).exists()
+    write(a, FIXED_OPS)
+    a = step(state, deps)
+    assert a.action == "say" and "2 edits applied" in a.text and "after 1 fix round" in a.text
+    assert len(env.reviews) == 2
+    assert json.loads(Path(state.run_dir, "plan.json").read_text())["ops"][0]["new_text"] == "Built plugin one."
+
+
+def test_reviewer_fix_round_is_limited(env):
+    deps = flagging_reviewer(env, env.make(), [PARTIAL])
+    state = start(env, deps)
+    a = run_to_tailor(env, deps, state)
+    write(a, GOOD_OPS)
+    a = step(state, deps)
+    write(a, GOOD_OPS)  # the model keeps the flagged wording
+    a = step(state, deps)
+    assert a.action == "say" and "op 1 partial" in a.text and len(env.reviews) == 2
+
+
+def test_invalid_fix_round_keeps_reviewed_plan(env):
+    deps = flagging_reviewer(env, env.make(), [PARTIAL])
+    state = start(env, deps)
+    a = run_to_tailor(env, deps, state)
+    write(a, GOOD_OPS)
+    a = step(state, deps)
+    for _ in range(3):
+        assert a.action == "ai" and a.step == "tailor"
+        write(a, {"ops": [BAD_OP]})
+        a = step(state, deps)
+    assert a.action == "say" and "2 edits applied" in a.text and "reviewed plan kept" in a.text
+    assert len(env.reviews) == 1
+
+
+def test_no_fix_round_when_disabled(env):
+    deps = flagging_reviewer(env, env.make(cfg=Config(output_folder_id="out", limits=LOOSE, review_fix_rounds=0)), [PARTIAL])
+    state = start(env, deps)
+    a = run_to_tailor(env, deps, state)
+    write(a, GOOD_OPS)
+    a = step(state, deps)
+    assert a.action == "say" and "op 1 partial" in a.text and len(env.reviews) == 1

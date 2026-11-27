@@ -30,6 +30,7 @@ Exactly one JSON object:
   - `in_facts` — not in the resume, but a verified fact supports it (give `fact_ids`);
   - `partial` — adjacent experience only (give the closest ids);
   - `gap` — nothing supports it; no ids.
+  - An item that lists members of one family ("AWS (SES, SNS, SQS)") is `covered`/`in_facts` only if the facts back the members; if only some are backed, it is `partial` with those ids, and name the missing members in `notes`.
 - `relevance`: score every editable block whose `kind` is `bullet` or `intro`, exactly once:
   - 3 — directly addresses a must_have;
   - 2 — addresses a nice_to_have or closely related work;
