@@ -47,4 +47,5 @@ limits:
   skills_line_max_ratio: 1.20
   max_bullets_per_role: 10
   max_ops_per_plan: 12
+  max_ops_per_past_company: 1
   total_editable_max_ratio: 1.05

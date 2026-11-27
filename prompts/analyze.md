@@ -34,7 +34,7 @@ Exactly one JSON object:
     - **examples or alternatives** of one kind of tool or skill ("CI/CD tools (Jenkins, GitHub Actions, GitLab CI)", "Java, Python or C#", "modern frameworks (Playwright, Selenium, Cypress)"): one backed member, or a close equivalent of the same kind, covers the item (`covered`/`in_facts`); only an adjacent tool makes it `partial`;
     - **components the role works with** ("AWS (EKS, S3, SES, SNS, SQS)", "Kubernetes networking (ingress, services, load balancers)"): `covered`/`in_facts` only if the facts back most members; if only some are, `partial` with those ids.
     In both cases name the missing members in `notes`.
-- `relevance`: score every editable block whose `kind` is `bullet` or `intro`, exactly once:
+- `relevance`: score every editable block whose `kind` is `bullet` or `intro`, exactly once (blocks of older roles have `priority` 2+; score them by the same scale, the next step decides whether to touch them):
   - 3 — directly addresses a must_have;
   - 2 — addresses a nice_to_have or closely related work;
   - 1 — weakly related;

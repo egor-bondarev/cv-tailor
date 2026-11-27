@@ -38,8 +38,10 @@ def test_ids_and_zones(resume_doc):
     assert editable == {
         "title", "summary", "skills.development", "skills.testing", "exp.acme.senior-sdet.intro",
         "exp.acme.senior-sdet.b01", "exp.acme.senior-sdet.b02", "exp.acme.senior-sdet.b03",
-        "exp.acme.qa-engineer.b01", "exp.acme.qa-engineer.b02",
+        "exp.acme.qa-engineer.b01", "exp.acme.qa-engineer.b02", "exp.globex.qa.b01",
     }
+    assert r.get("exp.acme.senior-sdet.b01").priority == 1 and r.get("exp.globex.qa.b01").priority == 2
+    assert not r.get("early.initech.b01").editable
     assert r.get("exp.globex.qa.b01").kind == "bullet"
     assert r.revision_id == "rev-1" and r.document_id == "doc-1"
 
@@ -173,3 +175,17 @@ def test_boundary_flag_for_last_paragraph_and_before_table():
     assert r.get("exp.acme.qa-engineer.b02").at_boundary
     assert r.get("ro.education.01").at_boundary
     assert not r.get("exp.acme.qa-engineer.b01").at_boundary
+
+
+def test_priority_specs(resume_doc):
+    prio = lambda spec: {b.company: b.priority for b in parse_resume(resume_doc, spec).blocks if b.editable and b.company}
+    assert prio([]) == {"acme": 1, "globex": 1}
+    assert prio(["globex"]) == {"globex": 1, "acme": 2}
+    assert prio({"acme": 1}) == {"acme": 1}
+    assert prio({"Acme": 2, "globex": 0}) == {"acme": 2}
+
+
+def test_company_priority_default_order():
+    from cvtailor.parse import company_priority
+    assert [company_priority([], f"c{i}", i, 0) for i in range(5)] == [1, 1, 2, 3, 4]
+    assert [company_priority(["a"], c, i, u) for i, (c, u) in enumerate([("a", 0), ("b", 0), ("c", 1)])] == [1, 2, 3]

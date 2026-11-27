@@ -75,7 +75,7 @@ The parser expects a Google Doc with this structure (other layouts will fail lou
      | `label` | used in the copy name `<label> - <Company> - <date>` |
      | `doc_id` | the part of the Google Doc URL between `/d/` and `/edit` |
      | `target_role` | which roles this resume is for; used to pick the resume |
-     | `editable_companies` | employers (Heading 2, as a slug: `Acme Analytics` → `acme-analytics`) whose bullets may be edited; everything else stays read-only. Usually only the current employer |
+     | `editable_companies` | edit priority of employers (Heading 2, as a slug: `Acme Analytics` → `acme-analytics`). Listed employers are priority 1 (main edits); later ones get 2, 3, … and at most one edit each; a map like `{acme: 1, globex: 0}` sets priorities explicitly (0 = read-only). Older roles without facts stay read-only |
      | `role_map` | optional; only if `cvtailor facts check` or a run reports that a role heading cannot be matched to a `facts.json` role: `acme/senior-sdet: acme-senior-sdet` |
 
 3. **Fact base.** Build `docs/facts.json` from your master CV with [prompts/build_facts.md](prompts/build_facts.md). Read every fact and set `verified: true` on the correct ones. Only verified facts are ever used. The schema is shown in [facts.example.json](facts.example.json). Then check it against your resumes:

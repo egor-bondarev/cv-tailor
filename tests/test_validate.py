@@ -200,3 +200,36 @@ def test_evidence_required_for_title_and_summary():
     for block, text in (("title", "Senior SDET | Platform"), ("summary", "Senior SDET with 10 years in testing.")):
         errs = validate_ops([Op(id=1, op="replace", block=block, new_text=text)], ctx)
         assert "evidence" in rules(errs), block
+
+
+G1 = "exp.globex.qa.b01"
+
+
+def test_older_role_without_facts_becomes_read_only():
+    ctx = ctx_for()
+    assert not ctx.resume.get(G1).editable
+    assert rules(validate_ops([Op(id=1, op="replace", block=G1, new_text="X.", evidence=["f-001"])], ctx)) == {"target"}
+
+
+def globex_ctx(limits=None):
+    d = data_with_roles()
+    d["roles"].append({"id": "globex-qa", "employer": "Globex", "title": "QA", "start": "2016-01",
+                       "end": "2017-01", "is_current": False})
+    d["facts"].append(fact("f-020", "Ran load tests with JMeter.", role="globex-qa"))
+    d["facts"].append(fact("f-021", "Automated UI checks with Selenium.", role="globex-qa"))
+    r = parse_resume(doc(*resume_elements()), ["acme"])
+    return make_context(r, load_facts(d), "cv", limits or Limits(bullet_replace_max_ratio=10, total_editable_max_ratio=10), {})
+
+
+def test_older_role_with_facts_is_editable_but_capped():
+    ctx = globex_ctx()
+    assert ctx.resume.get(G1).editable and ctx.resume.get(G1).priority == 2
+    one = [Op(id=1, op="replace", block=G1, new_text="Ran load tests with JMeter.", evidence=["f-020"])]
+    assert validate_ops(one, ctx) == []
+    two = one + [Op(id=2, op="insert_after", after=G1, new_text="Automated UI checks with Selenium.", evidence=["f-021"])]
+    errs = validate_ops(two, ctx)
+    assert [(e.rule, e.op) for e in errs] == [("priority", 2)]
+    kept, dropped = split_valid(two, ctx)
+    assert [o.id for o in kept] == [1] and dropped[0][0].id == 2
+    roomy = globex_ctx(Limits(bullet_replace_max_ratio=10, total_editable_max_ratio=10, max_ops_per_past_company=2))
+    assert validate_ops(two, roomy) == []

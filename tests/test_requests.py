@@ -7,6 +7,8 @@ from cvtailor.parse import parse_resume
 from cvtailor.requests import build_requests
 from docbuilder import doc, para
 
+ONLY_ACME = {"acme": 1}  # older companies stay read-only in these tests
+
 B1 = "exp.acme.senior-sdet.b01"
 B2 = "exp.acme.senior-sdet.b02"
 B3 = "exp.acme.senior-sdet.b03"
@@ -14,7 +16,7 @@ B3 = "exp.acme.senior-sdet.b03"
 
 @pytest.fixture
 def resume(resume_doc):
-    return parse_resume(resume_doc, ["acme"])
+    return parse_resume(resume_doc, ONLY_ACME)
 
 
 def _first_index(req: dict) -> int:
@@ -83,7 +85,7 @@ def test_rejects_insert_after_deleted_anchor(resume):
 
 def test_utf16_offsets_after_emoji():
     els = [para("Dev 😀: Python") if "".join(t for t, _ in e["runs"]) == "Development: Python" else e for e in resume_elements()]
-    r = parse_resume(doc(*els), ["acme"])
+    r = parse_resume(doc(*els), ONLY_ACME)
     b = r.get("skills.dev")
     reqs = build_requests(r, [Op(id=1, op="replace_skills", block="skills.dev", new_value="Go")])["requests"]
     assert reqs[0]["deleteContentRange"]["range"]["startIndex"] == b.start + utf16_len("Dev 😀: ")
@@ -91,7 +93,7 @@ def test_utf16_offsets_after_emoji():
 
 def test_replace_of_bullet_with_soft_break_allowed():
     els = [para("Built\x0bplugin one.", list_id="L1") if "".join(t for t, _ in e["runs"]) == "Built plugin one." else e for e in resume_elements()]
-    r = parse_resume(doc(*els), ["acme"])
+    r = parse_resume(doc(*els), ONLY_ACME)
     build_requests(r, [Op(id=1, op="replace", block=B1, new_text="Plain")])
 
 
@@ -115,7 +117,7 @@ def test_rejects_invalid_ops(resume, ops, match):
 
 def test_rejects_missing_revision(resume_doc):
     del resume_doc["revisionId"]
-    r = parse_resume(resume_doc, ["acme"])
+    r = parse_resume(resume_doc, ONLY_ACME)
     with pytest.raises(BuildError, match="revision"):
         build_requests(r, [Op(id=1, op="delete", block=B3)])
 
@@ -131,7 +133,7 @@ def _with_sub():
     els = resume_elements()
     i = next(k for k, e in enumerate(els) if "".join(t for t, _ in e["runs"]) == "Built plugin two.")
     els.insert(i + 1, para("Sub point.", list_id="L1", nesting=1))
-    return parse_resume(doc(*els), ["acme"])
+    return parse_resume(doc(*els), ONLY_ACME)
 
 
 def test_rejects_insert_after_bullet_with_children():
@@ -152,7 +154,7 @@ def test_rejects_delete_of_last_paragraph_in_document():
     drop = {"Globex", "QA | 2019 - 2024", "Refactored NUnit tests.", "EARLIER EXPERIENCE",
             "Initech | Tester | 2015 - 2016", "Tested things.", "EDUCATION", "University of Somewhere | 2010"}
     els = [e for e in resume_elements() if "".join(t for t, _ in e["runs"]) not in drop]
-    r = parse_resume(doc(*els), ["acme"])
+    r = parse_resume(doc(*els), ONLY_ACME)
     with pytest.raises(BuildError, match="last paragraph"):
         build_requests(r, [Op(id=1, op="delete", block="exp.acme.qa-engineer.b02")])
     build_requests(r, [Op(id=1, op="replace", block="exp.acme.qa-engineer.b02", new_text="ok")])

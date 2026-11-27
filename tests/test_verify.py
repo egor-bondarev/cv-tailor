@@ -6,6 +6,8 @@ from cvtailor.parse import parse_resume
 from cvtailor.verify import expected_texts, final_check, verify_applied
 from docbuilder import doc, para, table
 
+ONLY_ACME = {"acme": 1}  # older companies stay read-only in these tests
+
 B1 = "exp.acme.senior-sdet.b01"
 B2 = "exp.acme.senior-sdet.b02"
 B3 = "exp.acme.senior-sdet.b03"
@@ -49,7 +51,7 @@ def before():
 
 @pytest.fixture
 def resume(before):
-    return parse_resume(before, ["acme"])
+    return parse_resume(before, ONLY_ACME)
 
 
 def test_expected_texts_all_ops(before, resume):
@@ -82,7 +84,7 @@ def test_verify_inserted_bullet_wrong_list(before, resume):
 def test_verify_detects_link_spread():
     els = [para("", list_id="L1", runs=[("Built ", PLAIN), ("plugin", LINK), (" one.", PLAIN)]) if _t(e) == "Built plugin one." else e for e in resume_elements()]
     before = doc(*els)
-    resume = parse_resume(before, ["acme"])
+    resume = parse_resume(before, ONLY_ACME)
     ops = [Op(id=1, op="replace", block=B1, new_text="New one.")]
     good = [para("New one.", list_id="L1") if _t(e) == "Built plugin one." else e for e in els]
     bad = [para("", list_id="L1", runs=[("New one.", LINK)]) if _t(e) == "Built plugin one." else e for e in els]
@@ -106,45 +108,45 @@ def test_verify_bold_false_equals_missing(before, resume):
 
 def test_verify_table_change_detected():
     before = doc(*resume_elements(), table(["A", "B"]))
-    resume = parse_resume(before, ["acme"])
+    resume = parse_resume(before, ONLY_ACME)
     report = verify_applied(before, doc(*applied_elements(extra=[table(["A", "C"])])), resume, OPS)
     assert not report.ok and any("table" in p for p in report.problems)
 
 
 def test_final_ok_after_accept_all(before, resume):
-    assert final_check(before, doc(*applied_elements(), revision="rev-2"), resume, ["acme"]).ok
+    assert final_check(before, doc(*applied_elements(), revision="rev-2"), resume, ONLY_ACME).ok
 
 
 def test_final_ok_after_reject_all(before, resume):
-    assert final_check(before, doc(*resume_elements(), revision="rev-2"), resume, ["acme"]).ok
+    assert final_check(before, doc(*resume_elements(), revision="rev-2"), resume, ONLY_ACME).ok
 
 
 def test_final_detects_text_suggestion(before, resume):
     final = doc(*applied_elements())
     final["body"]["content"][2]["paragraph"]["elements"][0]["textRun"]["suggestedInsertionIds"] = ["s1"]
-    report = final_check(before, final, resume, ["acme"])
+    report = final_check(before, final, resume, ONLY_ACME)
     assert not report.ok and "unresolved suggestions" in report.problems[0]
 
 
 def test_final_detects_style_suggestion(before, resume):
     final = doc(*applied_elements())
     final["body"]["content"][2]["paragraph"]["elements"][0]["textRun"]["suggestedTextStyleChanges"] = {"s1": {}}
-    assert not final_check(before, final, resume, ["acme"]).ok
+    assert not final_check(before, final, resume, ONLY_ACME).ok
 
 
 def test_final_detects_readonly_change(before, resume):
     els = [para("University of Elsewhere | 2010") if _t(e).startswith("University") else e for e in applied_elements()]
-    report = final_check(before, doc(*els), resume, ["acme"])
+    report = final_check(before, doc(*els), resume, ONLY_ACME)
     assert not report.ok and any("ro.education.01" in p for p in report.problems)
 
 
 def test_final_ok_with_user_edit_in_editable_bullet(before, resume):
     edited = para("", list_id="L1", runs=[("Rewritten by ", PLAIN), ("me", BOLD)])
-    assert final_check(before, doc(*applied_elements(new_one=edited)), resume, ["acme"]).ok
+    assert final_check(before, doc(*applied_elements(new_one=edited)), resume, ONLY_ACME).ok
 
 
 def test_final_detects_bullet_moved_to_other_list(before, resume):
-    report = final_check(before, doc(*applied_elements(new_one=para("New one.", list_id="ZZ"))), resume, ["acme"])
+    report = final_check(before, doc(*applied_elements(new_one=para("New one.", list_id="ZZ"))), resume, ONLY_ACME)
     assert not report.ok and any("list" in p for p in report.problems)
 
 
@@ -152,7 +154,7 @@ def test_final_parse_error_is_problem(before, resume):
     els = applied_elements()
     i = next(k for k, e in enumerate(els) if _t(e) == "SUMMARY")
     els.insert(i + 2, para("Second summary paragraph."))
-    report = final_check(before, doc(*els), resume, ["acme"])
+    report = final_check(before, doc(*els), resume, ONLY_ACME)
     assert not report.ok and "cannot parse" in report.problems[0]
 
 
@@ -160,7 +162,7 @@ def test_final_detects_added_readonly_content(before, resume):
     els = applied_elements()
     i = next(k for k, e in enumerate(els) if _t(e) == "Refactored NUnit tests.")
     els.insert(i + 1, para("Extra readonly bullet.", list_id="L3"))
-    report = final_check(before, doc(*els), resume, ["acme"])
+    report = final_check(before, doc(*els), resume, ONLY_ACME)
     assert not report.ok and any("added" in p for p in report.problems)
 
 
@@ -169,8 +171,8 @@ def test_final_ok_with_nested_bullet_after_insert_and_delete():
     i = next(k for k, e in enumerate(els) if _t(e) == "Built plugin two.")
     els.insert(i + 1, para("Sub point.", list_id="L1", nesting=1))
     before = doc(*els)
-    resume = parse_resume(before, ["acme"])
+    resume = parse_resume(before, ONLY_ACME)
     after = [e for e in els if _t(e) != "Built plugin one."]
     j = next(k for k, e in enumerate(after) if _t(e) == "Built plugin three.")
     after.insert(j + 1, para("Inserted.", list_id="L1"))
-    assert final_check(before, doc(*after), resume, ["acme"]).ok
+    assert final_check(before, doc(*after), resume, ONLY_ACME).ok

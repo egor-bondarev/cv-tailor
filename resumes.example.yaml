@@ -5,7 +5,11 @@
   label: Senior SDET                 # used in the copy name: "<label> - <Company> - YYYY-MM-DD"
   doc_id: "<google-doc-id>"
   target_role: Senior SDET, Python test frameworks and developer tooling
-  editable_companies: [acme]         # slugs of Heading 2 companies whose bullets may be edited
+  # Edit priority of EXPERIENCE companies (Heading 2, as slugs). A list: these are priority 1 (main edits),
+  # later companies get 2, 3, … (at most limits.max_ops_per_past_company edits each). Empty or absent:
+  # the two most recent companies are priority 1. A map sets priorities explicitly; 0 = read-only.
+  # Older roles with no role in facts.json stay read-only.
+  editable_companies: [acme]         # or: {acme: 1, globex: 2, initech: 0}
   # role_map:                        # only if a role heading cannot be matched to facts.json automatically
   #   acme/senior-sdet: acme-senior-sdet
 

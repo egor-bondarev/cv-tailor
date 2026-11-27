@@ -24,6 +24,7 @@ class Limits(BaseModel):
     skills_line_max_ratio: float = 1.20
     max_bullets_per_role: int = 10
     max_ops_per_plan: int = 12
+    max_ops_per_past_company: int = 1
     total_editable_max_ratio: float = 1.05
 
 
@@ -46,7 +47,9 @@ class ResumeConfig(BaseModel):
     label: str
     doc_id: str
     target_role: str = ""
-    editable_companies: list[str] = []
+    # list: these companies are priority 1, later EXPERIENCE companies get 2, 3, …;
+    # empty: the two most recent companies are priority 1; dict: explicit priorities (0 = read-only)
+    editable_companies: list[str] | dict[str, int] = []
     role_map: dict[str, str] = {}
 
 
