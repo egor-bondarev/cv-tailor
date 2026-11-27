@@ -2,7 +2,7 @@
 
 Tailor your resume to a job posting without making things up.
 
-You paste a job description into a chat with an AI agent. `cv-tailor` picks the best of your base resumes, copies it in Google Drive, and adds targeted edits to the copy as **Google Docs suggestions**. You then accept, reject, or edit each one in the document. Every edit must be backed by a fact from your own verified fact base, and code checks this, not the model.
+You paste a job description into a chat with an AI agent. `cv-tailor` picks the best of your base resumes, copies it in Google Drive, and adds targeted edits to the copy as **Google Docs suggestions**. Each edit also gets a comment in the document with its reason, the facts behind it and the reviewer's verdict. You then accept, reject, or edit each one in the document. Every edit must be backed by a fact from your own verified fact base, and code checks this, not the model.
 
 > **Status: design stage.** The design is settled ([DESIGN.md](DESIGN.md), in Russian) and the Google side has been tested. The `cvtailor` CLI is not implemented yet. See [Roadmap](#roadmap).
 
@@ -88,7 +88,7 @@ The parser expects a Google Doc with this structure (other layouts will fail lou
 
 ## Usage
 
-**With Claude Code (recommended).** Open Claude Code in the repository root and paste a vacancy: "tailor my resume to this vacancy at Acme: …". The project skill [`.claude/skills/cv-tailor/SKILL.md`](.claude/skills/cv-tailor/SKILL.md) starts `cvtailor run`, which calls the model for every AI step itself (`claude -p`, a fresh small context per step); the chat only relays the resume question and shows the link to the copy. Review the suggestions in Google Docs, then say "done" and it runs the final check. Other agents can follow the same file as instructions.
+**With Claude Code (recommended).** Open Claude Code in the repository root and paste a vacancy: "tailor my resume to this vacancy at Acme: …". The project skill [`.claude/skills/cv-tailor/SKILL.md`](.claude/skills/cv-tailor/SKILL.md) starts `cvtailor run`, which calls the model for every AI step itself (`claude -p`, a fresh small context per step); the chat only relays the resume question and shows the link to the copy. Review the suggestions (each has a comment with its reason and facts) in Google Docs, then say "done" and it runs the final check. Other agents can follow the same file as instructions.
 
 **From a terminal.**
 

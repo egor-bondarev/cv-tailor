@@ -45,7 +45,7 @@ Do not read prompts, packs or other run files in this mode: the model calls happ
 Tell the user, in their language and briefly:
 - the link to the copy and that every edit is a suggestion they must accept, reject or edit in Google Docs;
 - the edits flagged by the reviewer (`partial` / `unsupported`) and the must-have gaps from the summary;
-- that `review.md` in the run folder explains each edit.
+- that each edit has a comment in the document with its reason, the facts behind it and the reviewer's verdict (the same is in `review.md` in the run folder); the comments can be resolved or deleted after review.
 
 Then wait. When the user says they reviewed it ("готово", "done", "проверь"), run `"$CVT" final` and report its text: whether the check passed and how many edits were accepted, edited or rejected. Ask whether any accepted edit is not backed by facts; if they name one, note it for the project owner.
 
