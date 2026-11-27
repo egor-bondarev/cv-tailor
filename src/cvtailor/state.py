@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import shutil
+from contextlib import contextmanager
 import subprocess
 from dataclasses import dataclass, field
 from datetime import date
@@ -42,7 +44,7 @@ AUTH_TEXT = "Google sign-in is required: run `cvtailor login` (it opens a browse
 
 
 class Action(BaseModel):
-    action: Literal["ai", "ask_user", "say", "auth", "done"]
+    action: Literal["ai", "ask_user", "say", "auth", "done", "continue"]
     step: str
     prompt: str | None = None
     input: str | None = None
@@ -73,6 +75,7 @@ class RunState(BaseModel):
     copy_url: str | None = None
     copy_revision: str | None = None
     review_round: int = 0
+    notes: list[str] = []
     apply_started: bool = False
     applied: bool = False
 
@@ -116,6 +119,28 @@ def init_run(repo: Path, company: str, vacancy_text: str, forced_resume: str | N
     state.save()
     (runs / ".current").write_text(name)
     return state
+
+
+class RunLocked(Exception):
+    pass
+
+
+LOCKED_TEXT = ("another cvtailor process is working on this run (a terminal or another chat session); "
+               "wait for it to finish, then run the command again")
+
+
+@contextmanager
+def run_lock(run_dir: Path):
+    """One process per run: a second `run`/`next` on the same folder stops instead of racing."""
+    with open(Path(run_dir) / ".lock", "w") as f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RunLocked(LOCKED_TEXT) from None
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
 
 
 class _Blocked(Exception):
@@ -196,6 +221,8 @@ class Runner:
             return issue(self.s.errors)
         obj, errors = load_ai_json(out, model)
         if obj is not None:
+            # the answer may carry prose or code fences around the JSON: keep only the parsed object
+            out.write_text(obj.model_dump_json(indent=2))
             result, errors = judge(obj)
             if not errors:
                 self.s.awaiting = None
@@ -447,6 +474,7 @@ class Runner:
             resume=self.ctx().resume, facts=self.d.facts,
             review=Review.model_validate(review_raw["review"]) if review_raw["review"] else None,
             reviewer_status=review_raw["status"], verify=VerifyReport.model_validate(self.read("verify.json")),
+            notes=self.s.notes,
         )
         (self.run / "review.md").write_text(review_md(data))
         text = summary_txt(data)

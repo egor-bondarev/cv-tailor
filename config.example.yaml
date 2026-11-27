@@ -21,6 +21,18 @@ reviewer_timeout_s: 100
 # Rounds in which reviewer findings (partial / unsupported) go back to the AI for a fix; 0 = only report them
 review_fix_rounds: 1
 
+# Scripted AI steps (`cvtailor run`): command template ({model} is replaced), model per step,
+# timeout per call, and the time after which `run` stops with `continue` (keep it well below
+# your agent's shell timeout minus ai.timeout_s). Defaults shown.
+ai:
+  command: [claude, -p, --model, "{model}", --output-format, json, --tools, "", --no-session-persistence, --strict-mcp-config,
+            --setting-sources, project,
+            --system-prompt, "You are one step of a scripted pipeline. Follow the step instructions in the user message. You cannot read or write files: answer with exactly one JSON object and nothing else."]
+  models: {extract: sonnet, route: sonnet, analyze: sonnet, tailor: opus}
+  default_model: sonnet
+  timeout_s: 240
+  max_run_seconds: 240
+
 # Validator limits (characters / ratios to the original block). Defaults shown.
 limits:
   bullet_max_chars: 220

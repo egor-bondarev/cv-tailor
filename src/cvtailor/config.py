@@ -7,6 +7,8 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from cvtailor.ai import AiSettings
+
 
 class ConfigError(ValueError):
     pass
@@ -35,6 +37,7 @@ class Config(BaseModel):
     reviewer_command: list[str] = ["codex", "exec", "--skip-git-repo-check", "-s", "read-only", "-"]
     reviewer_timeout_s: int = 100
     review_fix_rounds: int = 1
+    ai: AiSettings = AiSettings()
 
 
 class ResumeConfig(BaseModel):

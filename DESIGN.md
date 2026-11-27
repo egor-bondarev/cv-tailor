@@ -153,6 +153,10 @@ sequenceDiagram
 
 `SKILL.md` сводится к описанию этого цикла.
 
+### `cvtailor run` (v2, V1)
+
+Тот же автомат, но ИИ-шаги выполняет сам Python (`ai.py`): на действие `ai` он вызывает команду из `ai.command` (по умолчанию `claude -p --model <модель шага> --output-format json --tools "" …`) в пустой временной папке, передаёт на stdin промпт шага, вход и — на повторе — прошлый ответ (`<output>.attemptN`), пишет ответ в `output` и снова вызывает `next`. Каждый вызов — свежий контекст только с промптом и входом. Журнал — `runs/<run>/ai_calls.jsonl` (модель, время, символы, токены и стоимость из ответа `claude`). `run` останавливается на `ask_user` (в терминале — вопрос через `input()`, `--non-interactive` — первый вариант с пометкой в сводке), `say`, `auth`, `done`, при ошибке вызова модели (`say`, состояние не тронуто) и действием `continue`, если прошло больше `ai.max_run_seconds` (чтобы вызов из чата не упёрся в таймаут shell). Вызов изолирован от настроек пользователя: `--strict-mcp-config` (без MCP-серверов) и `--setting-sources project` в пустой папке (без глобального CLAUDE.md); после разбора ответ перезаписывается чистым JSON. `run` и `next` берут блокировку `runs/<run>/.lock`: второй процесс на тот же прогон получает `say` и ничего не делает. Скилл в обычном режиме только запускает `cvtailor run --json` и передаёт вопросы; ручной режим через `next` остаётся запасным.
+
 ## 6. Роутинг и анализ (ИИ)
 
 **Роутинг (`route.json`).** Вход: `vacancy.json` + для каждого резюме `target_role`, описание роли и текст SUMMARY из кэша. Выход:
@@ -399,7 +403,7 @@ Evidence: f-001 «Cut the flaky test rate…» · Reason: must_have "CI reliabil
 ```text
 cv-tailor/
 ├── DESIGN.md
-├── .claude/skills/cv-tailor/SKILL.md  # цикл: cvtailor next → выполнить действие → next
+├── .claude/skills/cv-tailor/SKILL.md  # cvtailor run --json → вопросы и сводка; запасной ручной цикл next
 ├── docs/google-setup.md
 ├── prompts/
 │   ├── build_facts.md         # сборка facts.json (готов)

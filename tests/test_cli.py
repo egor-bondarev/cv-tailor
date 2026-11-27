@@ -126,3 +126,18 @@ def test_final_without_copy_says_so(repo, monkeypatch, capsys):
     capsys.readouterr()
     assert cli.main(["final", "--repo", str(repo)]) == 1
     assert "no copy" in capsys.readouterr().out
+
+
+def test_run_json_starts_run_and_prints_one_line(repo, monkeypatch, capsys):
+    import io
+    from cvtailor.ai import CallRecord
+    _setup_run_repo(repo)
+    monkeypatch.setattr("sys.stdin", io.StringIO("We need an SDET"))
+    monkeypatch.setattr("cvtailor.autorun.call_model",
+                        lambda step, *a: CallRecord(step=step, model="m", ok=False, error="exit 1"))
+    assert cli.main(["run", "--company", "Acme", "--json", "--repo", str(repo)]) == 0
+    captured = capsys.readouterr()
+    out = captured.out.strip().splitlines()
+    assert len(out) == 1 and "extract: AI call failed" in json.loads(out[0])["text"]
+    assert "[cvtailor] extract: calling the model" in captured.err
+    assert (repo / "runs" / (repo / "runs" / ".current").read_text() / "ai_calls.jsonl").exists()
