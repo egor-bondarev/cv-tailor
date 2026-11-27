@@ -105,7 +105,8 @@ class Deps:
 
 
 def init_run(repo: Path, company: str, vacancy_text: str, forced_resume: str | None,
-             resumes: list[ResumeConfig], today: date) -> RunState:
+             resumes: list[ResumeConfig], today: date, url: str | None = None,
+             page_html: str | None = None) -> RunState:
     if forced_resume and forced_resume not in {r.id for r in resumes}:
         raise ConfigError(f"unknown resume {forced_resume!r}; known: {[r.id for r in resumes]}")
     if not vacancy_text.strip():
@@ -116,6 +117,10 @@ def init_run(repo: Path, company: str, vacancy_text: str, forced_resume: str | N
     run = runs / name
     run.mkdir()
     (run / "vacancy.txt").write_text(vacancy_text)
+    if url:
+        (run / "vacancy.url").write_text(url + "\n")
+    if page_html is not None:
+        (run / "vacancy.html").write_text(page_html)
     state = RunState(run_dir=str(run), company=company, created=today.isoformat(), forced_resume=forced_resume)
     state.save()
     (runs / ".current").write_text(name)

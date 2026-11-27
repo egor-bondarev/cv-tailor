@@ -1,6 +1,6 @@
 ---
 name: cv-tailor
-description: Tailor one of the user's base resumes in Google Docs to a job posting, using only verified facts, by driving the `cvtailor` CLI step by step. Use when the user pastes a vacancy / job description and asks to adapt, tailor or prepare a resume for it (in any language), or asks to continue or finish a cv-tailor run ("проверь", "готово", "final").
+description: Tailor one of the user's base resumes in Google Docs to a job posting, using only verified facts, by driving the `cvtailor` CLI step by step. Use when the user pastes a vacancy / job description or a link to one and asks to adapt, tailor or prepare a resume for it (in any language), or asks to continue or finish a cv-tailor run ("проверь", "готово", "final").
 ---
 
 # cv-tailor: run the pipeline
@@ -26,6 +26,10 @@ EOF
 ```
 
 Add `--resume <id>` only if the user named the base resume. Use a scratch directory instead of `/tmp` if your environment provides one. Progress lines go to stderr; the last stdout line is one JSON action.
+
+**If the user gave a link instead of the text**, let the CLI download it: `"$CVT" run --json --url "<link>" < /dev/null` (add `--company "<Company>"` if the user named it). The company is taken from the page when the page states it.
+- `say` with "company name not found on the page": take the company from the user's message or the link's site if it is unambiguous, otherwise ask; then run the same command with `--company`.
+- `say` with "cannot read the vacancy page" (the site needs a browser or a sign-in, as LinkedIn does): read the page with your own web tool and pass the vacancy text on stdin with the same `--url` (and `--company`), as in the block above. If you cannot read it either, ask the user to paste the text.
 
 ## 2. The loop
 
