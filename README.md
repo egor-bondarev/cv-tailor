@@ -94,12 +94,15 @@ The parser expects a Google Doc with this structure (other layouts will fail lou
 
 ```bash
 cvtailor run --company "Acme" < vacancy.txt   # add --resume ID to skip resume choice
+cvtailor run --url https://jobs.example.com/123 # or download the vacancy page (company from the page)
 cvtailor run --answer 1                         # if it stopped with a question
 cvtailor final                                  # after you accepted/rejected suggestions in Docs
 cvtailor final --fix-layout                     # if final says a role is split across two pages
 ```
 
 `run` stops only when it needs you: a question, the summary, Google sign-in, or `continue` after its time budget (`ai.max_run_seconds`, so a chat agent's shell call does not time out; just run it again). `--non-interactive` takes the top-ranked resume without asking, `--json` prints the stopping action as one JSON line, `--from STEP` restarts from a step. Model calls and their tokens are logged to `runs/<run>/ai_calls.jsonl`.
+
+`--url` downloads the page (http(s) only, 20 s timeout, 3 MB limit, no cookies) and keeps `vacancy.url`, `vacancy.html` and the extracted `vacancy.txt` in the run folder. Role, company and description come from the schema.org `JobPosting` block many job boards embed, otherwise from the page's visible text; `--company` is needed only when the page does not name the company. Pages that need a browser or a sign-in (LinkedIn) give almost no text: then pass the text on stdin with the same `--url` (the terminal asks you to paste it).
 
 `final` also exports the copy to PDF and checks that no role starts on one page and ends on the next. `--fix-layout` fixes such a role directly in the copy: a page break before its heading, and the manual page break right after it (which would now leave a near-empty page) removed; it re-checks until every role fits.
 

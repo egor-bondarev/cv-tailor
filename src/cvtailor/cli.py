@@ -80,11 +80,36 @@ def _print_action(act) -> int:
     return 0
 
 
-def cmd_init(repo: Path, company: str, resume: str | None) -> int:
+def _vacancy(company: str | None, url: str | None, paste: bool = False) -> dict:
+    """init_run arguments for a new run: the vacancy text from stdin or, with only a link, from the page."""
+    from cvtailor.fetch import FetchError, fetch_vacancy
+    text = "" if url and sys.stdin.isatty() else sys.stdin.read()  # with a link, a terminal is not waited on
+    page_html = None
+    if url and not text.strip():
+        try:
+            page = fetch_vacancy(url)
+        except FetchError as exc:
+            if not paste:
+                raise ConfigError(
+                    f"cannot read the vacancy page: {exc}. Read the page another way (a browser or your web tool) "
+                    f"and pass its text on stdin with the same --url, or paste the vacancy text") from None
+            print(f"Cannot read the vacancy page: {exc}.\nPaste the vacancy text, then press Ctrl-D:",
+                  file=sys.stderr)
+            text = sys.stdin.read()
+        else:
+            text, page_html, url = page.text, page.html, page.url
+            company = company or page.company
+    if not company:
+        raise ConfigError("company name not found" + (" on the page" if url else "") + ": pass --company")
+    return {"company": company, "vacancy_text": text, "url": url, "page_html": page_html}
+
+
+def cmd_init(repo: Path, company: str | None, resume: str | None, url: str | None = None) -> int:
     from datetime import date
     from cvtailor.state import init_run
     try:
-        state = init_run(repo, company, sys.stdin.read(), resume, load_resumes(repo), date.today())
+        state = init_run(repo, forced_resume=resume, resumes=load_resumes(repo), today=date.today(),
+                         **_vacancy(company, url))
     except (ConfigError, FileNotFoundError) as exc:
         print(f"ERROR: {exc}")
         return 1
@@ -128,14 +153,16 @@ def _print_human(act) -> None:
 
 
 def cmd_run(repo: Path, company: str | None, resume: str | None, run: str | None, answer: str | None,
-            from_step: str | None, non_interactive: bool, as_json: bool) -> int:
+            from_step: str | None, non_interactive: bool, as_json: bool, url: str | None = None) -> int:
     from datetime import date
     from cvtailor.autorun import run_until_stop
     from cvtailor.state import Action, init_run
     try:
         deps = _deps(repo)
-        if company:
-            run_dir = Path(init_run(repo, company, sys.stdin.read(), resume, deps.resumes, date.today()).run_dir)
+        if company or url:
+            paste = not as_json and not non_interactive and sys.stdin.isatty()
+            run_dir = Path(init_run(repo, forced_resume=resume, resumes=deps.resumes, today=date.today(),
+                                    **_vacancy(company, url, paste)).run_dir)
         else:
             run_dir = _run_dir(repo, run)
     except (ConfigError, FactsError, FileNotFoundError) as exc:
@@ -216,8 +243,9 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--offline", action="store_true", help="skip reading resumes from Google")
     check.add_argument("--repo", default=".", help="repository root (default: current directory)")
 
-    init = sub.add_parser("init", help="start a run; vacancy text on stdin")
-    init.add_argument("--company", required=True)
+    init = sub.add_parser("init", help="start a run; vacancy text on stdin or --url")
+    init.add_argument("--company", help="required unless the --url page names the company")
+    init.add_argument("--url", help="vacancy link: the page is downloaded unless the text is on stdin")
     init.add_argument("--resume", help="skip routing and use this resume id")
     init.add_argument("--repo", default=".")
     nxt = sub.add_parser("next", help="advance the current run and print the next action as JSON")
@@ -227,6 +255,7 @@ def main(argv: list[str] | None = None) -> int:
     nxt.add_argument("--repo", default=".")
     rn = sub.add_parser("run", help="run the pipeline, calling the model for every AI step, until it needs you")
     rn.add_argument("--company", help="start a new run for this company; vacancy text on stdin")
+    rn.add_argument("--url", help="start a new run from a vacancy link (company from the page unless --company)")
     rn.add_argument("--resume", help="with --company: skip routing and use this resume id")
     rn.add_argument("--run", help="continue this run folder (default: the current run)")
     rn.add_argument("--answer", help="answer to the pending question")
@@ -246,12 +275,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.group == "facts" and getattr(args, "command", None) == "check":
         return cmd_facts_check(Path(args.repo), args.offline)
     if args.group == "init":
-        return cmd_init(Path(args.repo), args.company, args.resume)
+        if not args.company and not args.url:
+            parser.error("init needs --company or --url")
+        return cmd_init(Path(args.repo), args.company, args.resume, args.url)
     if args.group == "next":
         return cmd_next(Path(args.repo), args.run, args.answer, args.from_step)
     if args.group == "run":
         return cmd_run(Path(args.repo), args.company, args.resume, args.run, args.answer, args.from_step,
-                       args.non_interactive, args.as_json)
+                       args.non_interactive, args.as_json, args.url)
     if args.group == "final":
         return cmd_final(Path(args.repo), args.run, args.fix_layout)
     if args.group == "login":

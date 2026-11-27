@@ -141,3 +141,59 @@ def test_run_json_starts_run_and_prints_one_line(repo, monkeypatch, capsys):
     assert len(out) == 1 and "extract: AI call failed" in json.loads(out[0])["text"]
     assert "[cvtailor] extract: calling the model" in captured.err
     assert (repo / "runs" / (repo / "runs" / ".current").read_text() / "ai_calls.jsonl").exists()
+
+
+def _fake_fetch(monkeypatch, company="Acme"):
+    from cvtailor.fetch import FetchError, Page
+
+    def fetch(url):
+        if "fail" in url:
+            raise FetchError("the site answered HTTP 403")
+        return Page(url=url + "?final", html="<html>page</html>", text="Role: SDET\n\nWe need an SDET", company=company)
+    monkeypatch.setattr("cvtailor.fetch.fetch_vacancy", fetch)
+
+
+def test_init_from_url_takes_company_from_page(repo, monkeypatch, capsys):
+    import io
+    _fake_fetch(monkeypatch)
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    assert cli.main(["init", "--url", "https://jobs.example.com/1", "--repo", str(repo)]) == 0
+    run = repo / "runs" / (repo / "runs" / ".current").read_text()
+    assert run.name.endswith("_acme")
+    assert (run / "vacancy.txt").read_text() == "Role: SDET\n\nWe need an SDET"
+    assert (run / "vacancy.url").read_text() == "https://jobs.example.com/1?final\n"
+    assert (run / "vacancy.html").read_text() == "<html>page</html>"
+
+
+def test_init_from_url_with_text_on_stdin_does_not_fetch(repo, monkeypatch):
+    import io
+    monkeypatch.setattr("cvtailor.fetch.fetch_vacancy", lambda url: pytest.fail("must not fetch"))
+    monkeypatch.setattr("sys.stdin", io.StringIO("Text read by the agent"))
+    assert cli.main(["init", "--url", "https://x.example.com/1", "--company", "Globex", "--repo", str(repo)]) == 0
+    run = repo / "runs" / (repo / "runs" / ".current").read_text()
+    assert (run / "vacancy.txt").read_text() == "Text read by the agent"
+    assert (run / "vacancy.url").exists() and not (run / "vacancy.html").exists()
+
+
+def test_init_from_url_without_company_errors(repo, monkeypatch, capsys):
+    import io
+    _fake_fetch(monkeypatch, company=None)
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    assert cli.main(["init", "--url", "https://jobs.example.com/1", "--repo", str(repo)]) == 1
+    assert "company name not found on the page: pass --company" in capsys.readouterr().out
+    assert not (repo / "runs" / ".current").exists()
+
+
+def test_run_json_unreadable_page_says_how_to_continue(repo, monkeypatch, capsys):
+    import io
+    _setup_run_repo(repo)
+    _fake_fetch(monkeypatch)
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    assert cli.main(["run", "--url", "https://fail.example.com/1", "--json", "--repo", str(repo)]) == 1
+    act = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert act["action"] == "say" and "HTTP 403" in act["text"] and "same --url" in act["text"]
+
+
+def test_init_needs_company_or_url(repo):
+    with pytest.raises(SystemExit):
+        cli.main(["init", "--repo", str(repo)])
