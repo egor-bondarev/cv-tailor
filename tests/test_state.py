@@ -30,7 +30,7 @@ BAD_OP = {"id": 3, "op": "replace", "block": B2, "new_text": "Built plugin two f
 class FakeClient:
     def __init__(self, run_dir_ref):
         self.docs = {"doc-1": doc(*resume_elements(), doc_id="doc-1"), "doc-2": doc(*resume_elements(), doc_id="doc-2")}
-        self.folders, self.calls, self.previews, self.fail = {}, [], {}, {}
+        self.folders, self.calls, self.previews, self.fail, self.comments = {}, [], {}, {}, []
         self.run_dir_ref = run_dir_ref
         self.n = 0
 
@@ -82,6 +82,11 @@ class FakeClient:
 
     def rename(self, file_id, name):
         self.calls.append(("rename", name))
+
+    def add_comment(self, file_id, text, quote=None):
+        self._maybe_fail("add_comment")
+        self.comments.append((file_id, text, quote))
+        return f"c{len(self.comments)}"
 
 
 def facts_obj():
@@ -515,3 +520,57 @@ def test_no_fix_round_when_disabled(env):
     write(a, GOOD_OPS)
     a = step(state, deps)
     assert a.action == "say" and "op 1 partial" in a.text and len(env.reviews) == 1
+
+
+
+def test_each_applied_edit_gets_a_comment(env):
+    deps = env.make()
+    state = start(env, deps)
+    a = run_to_tailor(env, deps, state)
+    write(a, GOOD_OPS)
+    a = step(state, deps)
+    assert a.action == "say" and "comment in the document" in a.text
+    texts = [c[1] for c in env.client.comments]
+    assert len(texts) == 2 and "edit 1 of 2 · replace" in texts[0] and "Fact f-001" in texts[0]
+    assert "Reviewer (codex): supported" in texts[0] and "Removed bullet." in texts[1]
+    assert env.client.comments[0][2] == "Built plugin one, now shared."
+
+
+def test_auth_during_comments_resumes_without_duplicates(env):
+    deps = env.make()
+    state = start(env, deps)
+    a = run_to_tailor(env, deps, state)
+    write(a, GOOD_OPS)
+    real = env.client.add_comment
+
+    def second_fails(file_id, text, quote=None):
+        if len(env.client.comments) == 1:
+            env.client.add_comment = real
+            raise AuthRequired("expired")
+        return real(file_id, text, quote)
+
+    env.client.add_comment = second_fails
+    a = step(state, deps)
+    assert a.action == "auth" and len(env.client.comments) == 1
+    a = step(state, deps)
+    assert a.action == "say" and len(env.client.comments) == 2
+    assert "edit 2 of 2" in env.client.comments[1][1]
+
+
+def test_comment_error_is_a_note(env):
+    deps = env.make()
+    state = start(env, deps)
+    a = run_to_tailor(env, deps, state)
+    write(a, GOOD_OPS)
+    env.client.fail["add_comment"] = RuntimeError("quota")
+    a = step(state, deps)
+    assert a.action == "say" and "comments: 0 of 2 posted (RuntimeError: quota)" in a.text
+
+
+def test_comments_can_be_disabled(env):
+    deps = env.make(cfg=Config(output_folder_id="out", limits=LOOSE, doc_comments=False))
+    state = start(env, deps)
+    a = run_to_tailor(env, deps, state)
+    write(a, GOOD_OPS)
+    a = step(state, deps)
+    assert a.action == "say" and env.client.comments == [] and "comment" not in a.text

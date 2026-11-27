@@ -38,7 +38,7 @@ class FakeGoogle:
             "other": {"name": "Other doc", "parents": ["root"], "mimeType": "doc"},
             "resume-in-out": {"name": "Base 2", "parents": [OUT], "mimeType": "doc"},
         }
-        self.calls, self.errors, self.updates, self.doc_kwargs = [], {}, [], []
+        self.calls, self.errors, self.updates, self.doc_kwargs, self.comments = [], {}, [], [], []
         self._ids = (f"new-{i}" for i in itertools.count(1))
 
     # docs service
@@ -91,11 +91,25 @@ class _Drive:
             return {"id": fid}
         return _Req(self.f, "drive.copy", run)
 
+    def comments(self):
+        return _Comments(self.f)
+
     def update(self, fileId, body, fields=None):
         def run():
             self.f.files[fileId]["name"] = body["name"]
             return {"id": fileId}
         return _Req(self.f, "drive.update", run)
+
+
+class _Comments:
+    def __init__(self, fake):
+        self.f = fake
+
+    def create(self, fileId, body, fields):
+        def run():
+            self.f.comments.append((fileId, body))
+            return {"id": f"c{len(self.f.comments)}"}
+        return _Req(self.f, "drive.comments.create", run)
 
 
 @pytest.fixture
@@ -258,3 +272,23 @@ def test_read_retries_on_dns_and_os_errors(fake):
     fake.errors["docs.get"] = [httplib2.ServerNotFoundError("dns"), OSError("reset")]
     client(fake, sleeps).get_doc(BASE)
     assert sleeps == [1, 2]
+
+
+def test_add_comment_only_on_copies_in_output(fake):
+    c = client(fake)
+    copy = c.copy_doc(BASE, "Copy", OUT)
+    assert c.add_comment(copy, "why", quote="New text") == "c1"
+    assert fake.comments == [(copy, {"content": "why", "quotedFileContent": {"mimeType": "text/plain", "value": "New text"}})]
+    assert c.add_comment(copy, "no quote") == "c2" and fake.comments[-1][1] == {"content": "no quote"}
+    for fid in (BASE, "resume-in-out", "other"):
+        with pytest.raises(AccessDenied):
+            c.add_comment(fid, "x")
+
+
+def test_add_comment_not_retried_on_server_error(fake):
+    c = client(fake)
+    copy = c.copy_doc(BASE, "Copy", OUT)
+    fake.errors["drive.comments.create"] = [http_error(500)]
+    with pytest.raises(HttpError):
+        c.add_comment(copy, "x")
+    assert fake.comments == []

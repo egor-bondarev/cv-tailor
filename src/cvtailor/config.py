@@ -37,6 +37,7 @@ class Config(BaseModel):
     reviewer_command: list[str] = ["codex", "exec", "--skip-git-repo-check", "-s", "read-only", "-"]
     reviewer_timeout_s: int = 100
     review_fix_rounds: int = 1
+    doc_comments: bool = True
     ai: AiSettings = AiSettings()
 
 

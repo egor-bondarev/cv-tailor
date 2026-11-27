@@ -124,6 +124,7 @@ sequenceDiagram
 | 7 | Ревью второй моделью | ✅ (Codex) | подпроцесс `codex exec`, проверка схемы | `review.json` |
 | 8 | Применение | — | `requests.json`, `documents.batchUpdate` (`SUGGEST`) | `requests.json` |
 | 9 | Проверка и отчёт | — | `documents.get`, `verify`, при провале переименование; `review.md`, `summary.txt` | `after.json`, `review.md` |
+| 9a | Комментарии (v2, V2) | — | если `verify` прошёл и `doc_comments: true`: по комментарию Drive на каждую правку — что изменено, причина, факты, вердикт ревьюера; цитата — текст правки (Drive не привязывает комментарий к фрагменту Docs). Id комментариев в `state.json`, при повторе уже созданные пропускаются; ошибка — пометка в сводке, прогон не блокируется | `state.json` |
 | 10 | Финал (по запросу) | — | `documents.get`, `final` | `final.json` |
 
 Шаги 4, 8 и 9 выполняются внутри одного вызова `next` без участия агента.
