@@ -191,6 +191,11 @@ class GoogleClient:
             body["quotedFileContent"] = {"mimeType": "text/plain", "value": quote}
         return self._call(self.drive.comments().create(fileId=file_id, body=body, fields="id"), write=True)["id"]
 
+    def export_pdf(self, file_id: str) -> bytes:
+        """The document rendered by Google, for page layout checks."""
+        self._require(file_id in self.allowed_docs or self.in_output(file_id), "export_pdf", file_id)
+        return self._call(self.drive.files().export(fileId=file_id, mimeType="application/pdf"))
+
     def rename(self, file_id: str, name: str) -> None:
         self._require_writable("rename", file_id)
         self._call(self.drive.files().update(fileId=file_id, body={"name": name}, fields="id"), write=True)

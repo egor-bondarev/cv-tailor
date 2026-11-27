@@ -152,8 +152,10 @@ def cmd_run(repo: Path, company: str | None, resume: str | None, run: str | None
     return 0
 
 
-def cmd_final(repo: Path, run: str | None) -> int:
+def cmd_final(repo: Path, run: str | None, fix_layout: bool = False) -> int:
     import json
+    from cvtailor.docmodel import has_suggestions
+    from cvtailor.layout import check_layout
     from cvtailor.models import Op
     from cvtailor.report import acceptance
     from cvtailor.state import Action, RunState
@@ -169,7 +171,8 @@ def cmd_final(repo: Path, run: str | None) -> int:
         return 1
     rc = next(r for r in deps.resumes if r.id == state.resume_id)
     try:
-        final_doc = deps.client_factory().get_doc(state.copy_id)
+        client = deps.client_factory()
+        final_doc = client.get_doc(state.copy_id)
     except AuthRequired:
         _print_action(Action(action="auth", step="final", text="run `cvtailor login`, then `cvtailor final`"))
         return 1
@@ -184,10 +187,22 @@ def cmd_final(repo: Path, run: str | None) -> int:
     except ParseError:
         pass
     counts = {k: sum(o.outcome == k for o in outcomes) for k in ("accepted", "edited", "rejected")}
+    layout = ""
+    if not has_suggestions(final_doc):
+        try:
+            layout = check_layout(client, state.copy_id, fix_layout).text(fix_layout)
+        except AuthRequired:
+            _print_action(Action(action="auth", step="final", text="run `cvtailor login`, then `cvtailor final`"))
+            return 1
+        except Exception as exc:  # the layout check is advisory: never hide the final check behind it
+            layout = f"Layout check skipped ({type(exc).__name__}: {str(exc)[:120]})."
     (run_dir / "final.json").write_text(json.dumps({"ok": report.ok, "problems": report.problems,
-                                                    "outcomes": [o.model_dump() for o in outcomes], "counts": counts}, indent=2))
+                                                    "outcomes": [o.model_dump() for o in outcomes], "counts": counts,
+                                                    "layout": layout}, indent=2))
     text = ("Final check OK." if report.ok else "Final check found problems: " + "; ".join(report.problems[:5]))
     text += f" Edits: {counts['accepted']} accepted, {counts['edited']} edited, {counts['rejected']} rejected."
+    if layout:
+        text += " " + layout
     _print_action(Action(action="say", step="final", text=text))
     return 0 if report.ok else 1
 
@@ -221,6 +236,8 @@ def main(argv: list[str] | None = None) -> int:
     rn.add_argument("--repo", default=".")
     fin = sub.add_parser("final", help="check the copy after you resolved all suggestions in Google Docs")
     fin.add_argument("--run")
+    fin.add_argument("--fix-layout", action="store_true",
+                     help="move a role split across two pages to the next page (edits the copy directly)")
     fin.add_argument("--repo", default=".")
     lgn = sub.add_parser("login", help="sign in to Google (opens a browser)")
     lgn.add_argument("--repo", default=".")
@@ -236,7 +253,7 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_run(Path(args.repo), args.company, args.resume, args.run, args.answer, args.from_step,
                        args.non_interactive, args.as_json)
     if args.group == "final":
-        return cmd_final(Path(args.repo), args.run)
+        return cmd_final(Path(args.repo), args.run, args.fix_layout)
     if args.group == "login":
         login(Path(args.repo))
         print("signed in")

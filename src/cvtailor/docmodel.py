@@ -181,8 +181,12 @@ def _style_runs(p: Paragraph) -> list[tuple[int, tuple]]:
     return runs
 
 
+# Not compared: heading ids are per document, and `final --fix-layout` moves page breaks (v2 V4).
+UNCOMPARED_PARAGRAPH_KEYS = {"headingId", "pageBreakBefore"}
+
+
 def snapshot(p: Paragraph) -> ParaSnapshot:
-    ps = {k: v for k, v in p.raw.get("paragraphStyle", {}).items() if k != "headingId"}
+    ps = {k: v for k, v in p.raw.get("paragraphStyle", {}).items() if k not in UNCOMPARED_PARAGRAPH_KEYS}
     return ParaSnapshot(
         named_style=p.named_style,
         paragraph_style=ps,

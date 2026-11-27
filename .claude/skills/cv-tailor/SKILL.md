@@ -49,6 +49,8 @@ Tell the user, in their language and briefly:
 
 Then wait. When the user says they reviewed it ("готово", "done", "проверь"), run `"$CVT" final` and report its text: whether the check passed and how many edits were accepted, edited or rejected. Ask whether any accepted edit is not backed by facts; if they name one, note it for the project owner.
 
+If the text says a role is split across pages and suggests `--fix-layout`, ask the user whether to move that role to the next page. Only on their yes run `"$CVT" final --fix-layout`: it edits the copy directly (page breaks only, no text) and reports what it moved.
+
 ## 4. Manual mode (no scripted model calls)
 
 Use only when `cvtailor run` cannot call the model (for example, the `claude` command is missing or not signed in) and the user agrees. Drive the run with `"$CVT" next` instead of `run`: it prints one JSON action; do what it says, then call `next` again.
