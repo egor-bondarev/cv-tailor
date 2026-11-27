@@ -182,6 +182,15 @@ class GoogleClient:
         self._require_writable("batch_update", doc_id)
         return self._call(self.docs.documents().batchUpdate(documentId=doc_id, body=body), write=True)
 
+    def add_comment(self, file_id: str, text: str, quote: str | None = None) -> str:
+        """A file-level comment: the Drive API cannot anchor comments to text inside a Google Doc,
+        so the quote is shown as the comment's quoted content instead."""
+        self._require_writable("add_comment", file_id)
+        body: dict = {"content": text}
+        if quote:
+            body["quotedFileContent"] = {"mimeType": "text/plain", "value": quote}
+        return self._call(self.drive.comments().create(fileId=file_id, body=body, fields="id"), write=True)["id"]
+
     def rename(self, file_id: str, name: str) -> None:
         self._require_writable("rename", file_id)
         self._call(self.drive.files().update(fileId=file_id, body={"name": name}, fields="id"), write=True)

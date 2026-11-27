@@ -21,6 +21,9 @@ reviewer_timeout_s: 100
 # Rounds in which reviewer findings (partial / unsupported) go back to the AI for a fix; 0 = only report them
 review_fix_rounds: 1
 
+# Post one Google Docs comment per applied edit: reason, facts, reviewer verdict
+doc_comments: true
+
 # Scripted AI steps (`cvtailor run`): command template ({model} is replaced), model per step,
 # timeout per call, and the time after which `run` stops with `continue` (keep it well below
 # your agent's shell timeout minus ai.timeout_s). Defaults shown.

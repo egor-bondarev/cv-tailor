@@ -112,6 +112,38 @@ def summary_txt(d: ReportData) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _clip(text: str, n: int) -> str:
+    return text if len(text) <= n else text[: n - 1].rstrip() + "…"
+
+
+def op_comment(op: Op, d: ReportData, index: int) -> tuple[str, str]:
+    """(comment text, quoted text) explaining one edit; the quote is what the edit leaves in the document."""
+    b = d.resume.get(op.target)
+    facts = {f.id: f for f in d.facts.facts}
+    v = _verdicts(d).get(op.id)
+    score = next((r.score for r in d.analysis.relevance if r.block_id == op.target), None)
+    head = f"cv-tailor · edit {index} of {len(d.applied)} · {op.op}"
+    if score is not None and op.op != "insert_after":  # an insert's score would be its anchor's
+        head += f" · relevance {score}"
+    if op.op == "delete":
+        quote, what = b.text, "Removed bullet."
+    elif op.op == "insert_after":
+        quote, what = op.new_text, f"New bullet after «{_clip(b.text, 60)}»."
+    elif op.op == "replace_skills":
+        quote, what = b.text[: b.text.index(": ") + 2] + op.new_value, f"Was: {_clip(b.text, 160)}"
+    else:
+        quote, what = op.new_text, f"Was: {_clip(b.text, 160)}"
+    lines = [head, what, f"Why: {op.reason or '—'}"]
+    for fid in op.evidence:
+        lines.append(f"Fact {fid}: {_clip(facts[fid].claim, 140)}" if fid in facts else f"Fact {fid}")
+    if v:
+        line = f"Reviewer ({d.reviewer_status}): {v.verdict}"
+        if v.verdict != "supported":
+            line += f" — «{v.quote}» {v.comment}".rstrip()
+        lines.append(line)
+    return "\n".join(lines), quote
+
+
 class OpOutcome(BaseModel):
     op: int
     outcome: Literal["accepted", "edited", "rejected"]

@@ -25,14 +25,14 @@ from cvtailor.models import Op, ParseError
 from cvtailor.naming import doc_name, pick_folder, run_dir_name
 from cvtailor.packs import analyze_pack, extract_pack, review_pack, route_pack, tailor_pack
 from cvtailor.parse import parse_resume
-from cvtailor.report import ReportData, review_md, summary_txt
+from cvtailor.report import ReportData, op_comment, review_md, summary_txt
 from cvtailor.requests import build_requests
 from cvtailor.reviewer import resolve_reviewer, run_review
 from cvtailor.schemas import AiPlan, Analysis, Review, Route, Vacancy
 from cvtailor.validate import PlanContext, make_context, split_valid, validate_ops
 from cvtailor.verify import verify_applied
 
-STEPS = ["extract", "route", "copy", "analyze", "tailor", "review", "apply", "report", "done"]
+STEPS = ["extract", "route", "copy", "analyze", "tailor", "review", "apply", "comment", "report", "done"]
 AI_FILES = {
     "extract": ("extract.md", "extract.pack.md", "vacancy.json"),
     "route": ("route.md", "route.pack.md", "route.json"),
@@ -76,6 +76,7 @@ class RunState(BaseModel):
     copy_revision: str | None = None
     review_round: int = 0
     notes: list[str] = []
+    comments: dict[str, str] = {}
     apply_started: bool = False
     applied: bool = False
 
@@ -460,15 +461,41 @@ class Runner:
             failed = f"[FAILED] {self.s.copy_name}"
             client.rename(self.s.copy_id, failed)
             self.s.copy_name = failed
+        self.advance("comment")
+        return None
+
+    def step_comment(self, answer):
+        """One Google Docs comment per applied edit with its reason, facts and reviewer verdict."""
+        verified = self.read("verify.json").get("ok", False)
+        if self.d.cfg.doc_comments and verified and self.s.copy_id:
+            data, client = self.report_data(), self.client()
+            failed = None
+            for i, op in enumerate(data.applied, 1):
+                if str(op.id) in self.s.comments:
+                    continue
+                text, quote = op_comment(op, data, i)
+                try:
+                    self.s.comments[str(op.id)] = client.add_comment(self.s.copy_id, text, quote)
+                except AuthRequired:
+                    raise
+                except Exception as exc:  # comments are optional: never block the run on them
+                    failed = f"{type(exc).__name__}: {str(exc)[:120]}"
+                    break
+                self.s.save()
+            self.s.notes = [n for n in self.s.notes if not n.startswith(("comments:", "each edit has a comment"))]
+            if failed:
+                self.s.notes.append(f"comments: {len(self.s.comments)} of {len(data.applied)} posted ({failed})")
+            elif self.s.comments:
+                self.s.notes.append("each edit has a comment in the document with its reason and facts")
         self.advance("report")
         return None
 
-    def step_report(self, answer):
+    def report_data(self) -> ReportData:
         from cvtailor.models import VerifyReport
         review_raw = self.read("review.json")
         route = Route.model_validate(self.read("route.json")) if (self.run / "route.json").exists() else None
         dropped = [(Op(**d["op"]), [CheckError(**e) for e in d["errors"]]) for d in self.read("dropped.json")]
-        data = ReportData(
+        return ReportData(
             vacancy=self.vacancy(), resume_label=self.resume_cfg().label, route=route, doc_url=self.s.copy_url or "",
             analysis=Analysis.model_validate(self.read("analysis.json")), applied=self.ops(), dropped=dropped,
             resume=self.ctx().resume, facts=self.d.facts,
@@ -476,6 +503,9 @@ class Runner:
             reviewer_status=review_raw["status"], verify=VerifyReport.model_validate(self.read("verify.json")),
             notes=self.s.notes,
         )
+
+    def step_report(self, answer):
+        data = self.report_data()
         (self.run / "review.md").write_text(review_md(data))
         text = summary_txt(data)
         (self.run / "summary.txt").write_text(text)
