@@ -1,6 +1,6 @@
 ---
 name: cv-tailor
-description: Tailor one of the user's base resumes in Google Docs to a job posting, using only verified facts, by driving the `cvtailor` CLI step by step. Use when the user pastes a vacancy / job description or a link to one and asks to adapt, tailor or prepare a resume for it (in any language), or asks to continue or finish a cv-tailor run ("проверь", "готово", "final").
+description: Tailor one of the user's base resumes in Google Docs to a job posting and write a cover letter for it, using only verified facts, by driving the `cvtailor` CLI step by step. Use when the user pastes a vacancy / job description or a link to one and asks to adapt, tailor or prepare a resume or a cover letter for it (in any language), asks to change, shorten or fit a cover letter to a character limit, or asks to continue or finish a cv-tailor run ("проверь", "готово", "ок", "final").
 ---
 
 # cv-tailor: run the pipeline
@@ -11,7 +11,7 @@ You are the chat front end of a deterministic pipeline. The `cvtailor` CLI decid
 
 - Work from the repository root (the folder with `pyproject.toml` and `prompts/`).
 - Find the CLI once and reuse it: `CVT="$(command -v cvtailor || echo .venv/bin/cvtailor)"`, then check `"$CVT" --help`. If it is missing, tell the user to run `pip install -e '.[dev]'` in the project virtualenv and stop.
-- Never open `docs/facts.json`, `token.json`, `credentials.json`, `config.yaml` or `resumes.yaml`: everything you need is in the files the CLI points you to.
+- Never open `docs/facts.json`, `token.json`, `credentials.json`, `config.yaml`, `resumes.yaml` or `profile.yaml`: everything you need is in the files the CLI points you to.
 - Run `run` and `next` with the longest Bash timeout you have (600 s): one call may run several model steps, copy a document, apply edits and wait for the second-model reviewer.
 
 ## 1. Start a run
@@ -49,11 +49,22 @@ Do not read prompts, packs or other run files in this mode: the model calls happ
 Tell the user, in their language and briefly:
 - the link to the copy and that every edit is a suggestion they must accept, reject or edit in Google Docs;
 - the edits flagged by the reviewer (`partial` / `unsupported`) and the must-have gaps from the summary;
-- that each edit has a comment in the document with its reason, the facts behind it and the reviewer's verdict (the same is in `review.md` in the run folder); the comments can be resolved or deleted after review.
+- that each edit has a comment in the document with its reason, the facts behind it and the reviewer's verdict (the same is in `review.md` in the run folder); the comments can be resolved or deleted after review;
+- the cover letter link, its length, the hook (strong, weak or not found) and whether relocation is mentioned; paragraphs the reviewer flagged; any `Letter note` (for example, no name in `profile.yaml`). If the summary says the letter was not written, say why and offer `"$CVT" letter`.
 
-Then wait. When the user says they reviewed it ("готово", "done", "проверь"), run `"$CVT" final` and report its text: whether the check passed and how many edits were accepted, edited or rejected. Ask whether any accepted edit is not backed by facts; if they name one, note it for the project owner.
+Then wait. The user reviews the suggestions and reads the letter.
 
-If the text says a role is split across pages and suggests `--fix-layout`, ask the user whether to move that role to the next page. Only on their yes run `"$CVT" final --fix-layout`: it edits the copy directly (page breaks only, no text) and reports what it moved.
+- **Changes to the letter** ("убери второе достижение", "короче", "the form allows 900 characters"): run `"$CVT" letter --json --feedback "<their request, in their words>"`, add `--short` for a short letter or `--max-chars N` for a field limit. Show the new letter part of the text; repeat as often as needed. The letter document is rewritten in place. If the user edited it by hand, the tool keeps that document and writes a new one; tell them.
+- **"ок" / "готово" / "done" / "проверь":** run `"$CVT" final` and report its text:
+  - whether the check passed;
+  - how many edits were accepted, edited or rejected;
+  - the PDF links (resume and letter) in the company folder, or why they were not exported yet (suggestions left unresolved, or a role split across pages).
+
+  Ask whether any accepted edit is not backed by facts; if they name one, note it for the project owner.
+
+If the text says a role is split across pages, the PDFs were not exported. Ask the user whether to move that role to the next page.
+- On their yes, run `"$CVT" final --fix-layout`. It edits the copy directly (page breaks only, no text), reports what it moved, and exports the PDFs.
+- If they want to keep the layout, run `"$CVT" final --keep-layout`.
 
 ## 4. Manual mode (no scripted model calls)
 

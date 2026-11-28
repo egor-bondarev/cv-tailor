@@ -28,6 +28,41 @@ class ReportData(BaseModel):
     reviewer_status: str
     verify: VerifyReport
     notes: list[str] = []
+    letter: dict | None = None  # letter_result.json (v2 V6)
+    letter_text: str = ""
+
+
+def letter_lines(r: dict | None) -> list[str]:
+    """What the chat summary says about the cover letter."""
+    if not r:
+        return []
+    if not r.get("ok"):
+        return [f"Cover letter: not written ({r.get('error', 'unknown error')})."]
+    lines = [f"Cover letter: {r['url']} ({r['count']} characters, {r['mode']}: {r['limits']}; language {r['language']})."]
+    if r.get("kept_old_doc"):
+        lines.append("The previous letter document was edited by hand, so it was kept and a new one was written.")
+    h = r.get("hook")
+    if h:
+        weak = " — weak hook: it is cut first when the letter is shortened" if h["strength"] == "weak" else ""
+        lines.append(f"Hook: {h['strength']} {h['type']} «{h['quote']}» (bridge: {h['bridge']}){weak}.")
+    else:
+        lines.append("Hook: not found (no sentence about the company passed the rules); the intro rests on the role.")
+    if r.get("motivation"):
+        lines.append("Motivation used: " + ", ".join(r["motivation"]) + ".")
+    elif not r.get("has_motivation"):
+        lines.append("Motivation: profile.yaml has none, so the letter rests on the match between vacancy and experience.")
+    else:
+        lines.append("Motivation: none of the profile items is used in this version.")
+    rel = r.get("relocation") or {}
+    lines.append(f"Relocation: {'mentioned' if rel.get('mentioned') else 'not mentioned'}"
+                 + (f" ({rel['reason']})" if rel.get("reason") else "") + ".")
+    flagged = r.get("flagged") or []
+    if flagged:
+        lines.append("Letter, check carefully: " + "; ".join(f"paragraph {v['op']} {v['verdict']} «{v.get('quote', '')}»"
+                                                          for v in flagged))
+    lines.append(f"letter reviewer: {r.get('reviewer', 'none')}")
+    lines += [f"Letter note: {w}" for w in r.get("warnings") or []]
+    return lines
 
 
 def _gaps(d: ReportData) -> list[str]:
@@ -90,6 +125,10 @@ def review_md(d: ReportData) -> str:
         lines.append("")
     if not d.verify.ok:
         lines += ["## Verify FAILED", ""] + [f"- {p}" for p in d.verify.problems] + [""]
+    if d.letter:
+        lines += ["## Cover letter", ""] + [f"- {x}" for x in letter_lines(d.letter)] + [""]
+        if d.letter_text:
+            lines += ["```text", d.letter_text.rstrip(), "```", ""]
     return "\n".join(lines)
 
 
@@ -108,7 +147,10 @@ def summary_txt(d: ReportData) -> str:
     lines += [f"Note: {n}" for n in d.notes]
     if not d.verify.ok:
         lines.append(f"Verify FAILED, copy renamed [FAILED]: {'; '.join(d.verify.problems[:2])}")
+    lines += letter_lines(d.letter)
     lines.append("Accept or reject every suggestion in Google Docs before sending the resume.")
+    if d.letter and d.letter.get("ok"):
+        lines.append("Read the letter; say what to change, or \"ok\" to run the final check and export both to PDF.")
     return "\n".join(lines) + "\n"
 
 

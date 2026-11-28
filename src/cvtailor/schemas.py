@@ -13,6 +13,18 @@ class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+HookType = Literal["mission", "product", "challenge", "scale"]
+
+
+class HookCandidate(_Strict):
+    """A sentence in which the company talks about itself, quoted verbatim from the vacancy (v2 V6)."""
+
+    quote: str
+    type: HookType
+    strength: Literal["strong", "weak"]
+    why: str = ""
+
+
 class Vacancy(_Strict):
     title: str
     company: str | None = None
@@ -24,6 +36,8 @@ class Vacancy(_Strict):
     responsibilities: list[str] = []
     skills: list[str] = []
     domain: str | None = None
+    location: str | None = None
+    hooks: list[HookCandidate] = []
 
 
 class Route(_Strict):
@@ -81,3 +95,32 @@ class Verdict(_Strict):
 
 class Review(_Strict):
     verdicts: list[Verdict]
+
+
+class LetterHook(_Strict):
+    quote: str
+    type: HookType
+    strength: Literal["strong", "weak"]
+    bridge: str  # a verified fact id or a profile motivation id
+
+
+class LetterParagraph(_Strict):
+    part: Literal["intro", "value", "motivation", "closing"]
+    text: str
+    facts: list[str] = []
+    motivation: list[str] = []
+
+
+class LetterRelocation(_Strict):
+    mentioned: bool = False
+    reason: str = ""
+
+
+class LetterAi(_Strict):
+    language: str
+    greeting: str
+    paragraphs: list[LetterParagraph] = Field(min_length=3)
+    sign_off: str
+    hook: LetterHook | None = None
+    relocation: LetterRelocation = LetterRelocation()
+    notes: str = ""

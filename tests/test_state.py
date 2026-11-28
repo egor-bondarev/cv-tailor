@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from conftest import resume_elements
-from cvtailor.config import Config, Limits, ResumeConfig
+from cvtailor.config import Config, CoverLetterSettings, Limits, ResumeConfig
 from cvtailor.facts import load_facts
 from cvtailor.google_api import AuthRequired
 from cvtailor.models import Op
@@ -109,8 +109,11 @@ def env(tmp_path):
         reviews.append(kw)
         return subprocess.CompletedProcess(cmd, 0, stdout='{"verdicts": [{"op": 1, "verdict": "supported"}]}', stderr="")
 
-    def make(resume_list=None, factory=None, cfg=None):
-        deps = Deps(repo=REPO, cfg=cfg or Config(output_folder_id="out", limits=LOOSE), resumes=resume_list or resumes,
+    def make(resume_list=None, factory=None, cfg=None, profile=None):
+        cfg = cfg or Config(output_folder_id="out", limits=LOOSE)
+        if "cover_letter" not in cfg.model_fields_set:
+            cfg.cover_letter = CoverLetterSettings(enabled=False)  # letter tests turn it on explicitly
+        deps = Deps(repo=REPO, cfg=cfg, resumes=resume_list or resumes, profile=profile,
                     facts=facts_obj(), client_factory=factory or (lambda: client), reviewer_run=reviewer_run,
                     which=lambda n: "/bin/codex", today=date(2026, 11, 25))
         return deps

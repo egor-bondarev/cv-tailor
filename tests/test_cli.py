@@ -197,3 +197,68 @@ def test_run_json_unreadable_page_says_how_to_continue(repo, monkeypatch, capsys
 def test_init_needs_company_or_url(repo):
     with pytest.raises(SystemExit):
         cli.main(["init", "--repo", str(repo)])
+
+
+def test_letter_before_the_resume_is_done_says_so(repo, monkeypatch, capsys):
+    import io
+    _setup_run_repo(repo)
+    monkeypatch.setattr("sys.stdin", io.StringIO("We need an SDET"))
+    cli.main(["init", "--company", "Acme", "--repo", str(repo)])
+    capsys.readouterr()
+    assert cli.main(["letter", "--short", "--repo", str(repo)]) == 1
+    assert "not finished" in capsys.readouterr().out
+
+
+def test_letter_no_run_saves_the_request(repo, monkeypatch, capsys):
+    import io
+    from cvtailor.state import RunState
+    _setup_run_repo(repo)
+    monkeypatch.setattr("sys.stdin", io.StringIO("We need an SDET"))
+    cli.main(["init", "--company", "Acme", "--repo", str(repo)])
+    run = repo / "runs" / (repo / "runs" / ".current").read_text()
+    s = RunState.load(run)
+    s.step, s.applied = "done", True
+    s.save()
+    assert cli.main(["letter", "--feedback", "shorter intro", "--max-chars", "900", "--no-run",
+                     "--repo", str(repo)]) == 0
+    s = RunState.load(run)
+    assert s.letter_feedback == ["shorter intro"] and s.letter_max_chars == 900 and s.letter_revise
+    assert cli.main(["letter", "--short", "--no-run", "--repo", str(repo)]) == 0
+    s = RunState.load(run)
+    assert s.letter_mode == "short" and s.letter_max_chars is None and s.letter_feedback == ["shorter intro"]
+
+
+def test_letter_max_chars_too_small(repo):
+    with pytest.raises(SystemExit):
+        cli.main(["letter", "--max-chars", "100", "--repo", str(repo)])
+
+
+def test_export_pdfs_uploads_then_replaces(tmp_path):
+    from cvtailor.profile import Profile
+    from cvtailor.state import RunState
+
+    (tmp_path / "vacancy.json").write_text(json.dumps({
+        "title": "Senior SDET", "language": "en", "summary": "s", "must_have": ["Python"]}))
+    state = RunState(run_dir=str(tmp_path), company="Acme", created="2026-11-28", copy_id="copy-1",
+                     copy_name="SDET - Acme", folder_id="folder-1", letter_id="letter-1", letter_name="CL")
+
+    class Client:
+        def __init__(self):
+            self.uploads = []
+
+        def export_pdf(self, file_id):
+            return f"pdf of {file_id}".encode()
+
+        def upload_pdf(self, name, parent, data, file_id=None):
+            self.uploads.append((name, data, file_id))
+            return file_id or f"pdf-{len(self.uploads)}"
+
+    deps = type("D", (), {"profile": Profile.model_validate({"contacts": {"name": "Jane Doe"}})})()
+    client = Client()
+    text = cli.export_pdfs(client, state, deps)
+    assert client.uploads == [("Jane Doe. Resume - Senior SDET.pdf", b"pdf of copy-1", None),
+                              ("Jane Doe. Cover Letter - Senior SDET.pdf", b"pdf of letter-1", None)]
+    assert RunState.load(tmp_path).pdf_ids == {"resume": "pdf-1", "letter": "pdf-2"}
+    assert "Jane Doe. Resume - Senior SDET.pdf" in text
+    cli.export_pdfs(client, state, deps)
+    assert [u[2] for u in client.uploads[2:]] == ["pdf-1", "pdf-2"]
