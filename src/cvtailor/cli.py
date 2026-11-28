@@ -1,4 +1,4 @@
-"""cvtailor command line: facts check, init, next, run, final, login."""
+"""cvtailor command line: facts check, init, next, run, letter, final, login."""
 
 from __future__ import annotations
 
@@ -61,8 +61,10 @@ def _deps(repo: Path):
     cfg = load_config(repo)
     resumes = load_resumes(repo)
     facts = load_facts(repo / cfg.facts_path)
+    from cvtailor.profile import load_profile
+    profile = load_profile(repo / cfg.profile_path)
     allowed = {r.doc_id for r in resumes}
-    return Deps(repo=repo, cfg=cfg, resumes=resumes, facts=facts,
+    return Deps(repo=repo, cfg=cfg, resumes=resumes, facts=facts, profile=profile,
                 client_factory=lambda: GoogleClient.from_token(repo, allowed, cfg.output_folder_id))
 
 
@@ -179,7 +181,77 @@ def cmd_run(repo: Path, company: str | None, resume: str | None, run: str | None
     return 0
 
 
-def cmd_final(repo: Path, run: str | None, fix_layout: bool = False) -> int:
+def cmd_letter(repo: Path, run: str | None, feedback: str | None, mode: str | None, max_chars: int | None,
+               no_run: bool, as_json: bool) -> int:
+    """Write the cover letter again for a run: with the candidate's requests, a shorter mode or a character limit."""
+    from cvtailor.autorun import run_until_stop
+    from cvtailor.state import LOCKED_TEXT, Action, RunLocked, RunState, run_lock
+    try:
+        deps = _deps(repo)
+        run_dir = _run_dir(repo, run)
+        state = RunState.load(run_dir)
+    except (ConfigError, FactsError, FileNotFoundError) as exc:
+        act = Action(action="say", step="letter", text=f"ERROR: {exc}")
+        _print_action(act) if as_json else print(act.text)
+        return 1
+    if not state.applied and state.step not in ("letter", "report", "done"):
+        act = Action(action="say", step=state.step, text="the resume part of this run is not finished yet: "
+                     "run `cvtailor run` first; the letter is written right after the resume edits")
+        _print_action(act) if as_json else print(act.text)
+        return 1
+    try:
+        with run_lock(run_dir):
+            state = RunState.load(run_dir)
+            if feedback:
+                state.letter_feedback.append(feedback.strip())
+            if max_chars:
+                state.letter_max_chars = max_chars
+            elif mode:
+                state.letter_mode, state.letter_max_chars = mode, None
+            state.letter_revise = True
+            state.save()
+    except RunLocked:
+        act = Action(action="say", step=state.step, text=LOCKED_TEXT)
+        _print_action(act) if as_json else print(act.text)
+        return 1
+    if no_run:
+        print("Saved. Run `cvtailor next --from letter` (manual mode) or `cvtailor run --from letter`.")
+        return 0
+    act = run_until_stop(run_dir, deps, from_step="letter",
+                         log=lambda m: print(f"[cvtailor] {m}", file=sys.stderr, flush=True))
+    result = run_dir / "letter_result.json"
+    if act.step == "report" and act.action == "say" and result.exists():
+        # a rewrite only changes the letter: show its part of the summary, not the resume's again
+        import json
+        from cvtailor.report import letter_lines
+        r = json.loads(result.read_text())
+        tail = ['Read the letter; say what to change, or "ok" to run the final check and export both to PDF.']
+        act = act.model_copy(update={"text": "\n".join(letter_lines(r) + (tail if r.get("ok") else [])) + "\n"})
+    if as_json:
+        return _print_action(act)
+    _print_human(act)
+    return 0
+
+
+def export_pdfs(client, state, deps) -> str:
+    """Export the resume copy and the cover letter to PDF in the company folder; re-export replaces the files."""
+    import json
+    from cvtailor.letter import pdf_names
+    from cvtailor.schemas import Vacancy
+    vacancy = Vacancy.model_validate(json.loads((state.path / "vacancy.json").read_text()))
+    names = pdf_names(deps.profile, vacancy, state.copy_name or "Resume", state.letter_name if state.letter_id else None)
+    sources = {"resume": state.copy_id, "letter": state.letter_id}
+    done = []
+    for key, name in names.items():
+        file_id = client.upload_pdf(name, state.folder_id, client.export_pdf(sources[key]), state.pdf_ids.get(key))
+        state.pdf_ids[key] = file_id
+        state.save()
+        done.append(f"{name} (https://drive.google.com/file/d/{file_id}/view)")
+    return "PDF in the company folder: " + "; ".join(done) + "."
+
+
+def cmd_final(repo: Path, run: str | None, fix_layout: bool = False, export: bool = True,
+              keep_layout: bool = False) -> int:
     import json
     from cvtailor.docmodel import has_suggestions
     from cvtailor.layout import check_layout
@@ -214,22 +286,40 @@ def cmd_final(repo: Path, run: str | None, fix_layout: bool = False) -> int:
     except ParseError:
         pass
     counts = {k: sum(o.outcome == k for o in outcomes) for k in ("accepted", "edited", "rejected")}
-    layout = ""
+    layout, split_left = "", False
     if not has_suggestions(final_doc):
         try:
-            layout = check_layout(client, state.copy_id, fix_layout).text(fix_layout)
+            res = check_layout(client, state.copy_id, fix_layout)
+            layout = res.text(fix_layout)
+            split_left = bool(res.split) and not res.problem  # a role longer than a page cannot be fixed
         except AuthRequired:
             _print_action(Action(action="auth", step="final", text="run `cvtailor login`, then `cvtailor final`"))
             return 1
         except Exception as exc:  # the layout check is advisory: never hide the final check behind it
             layout = f"Layout check skipped ({type(exc).__name__}: {str(exc)[:120]})."
+    exported = ""
+    if export and split_left and not keep_layout:
+        exported = ("PDF not exported: a role is split across pages. Run `cvtailor final --fix-layout` to move it "
+                    "and export, or `cvtailor final --keep-layout` to export as it is.")
+    elif export and deps.cfg.cover_letter.export_pdf and report.ok and not has_suggestions(final_doc) and state.folder_id:
+        try:
+            exported = export_pdfs(client, state, deps)
+        except AuthRequired:
+            _print_action(Action(action="auth", step="final", text="run `cvtailor login`, then `cvtailor final`"))
+            return 1
+        except Exception as exc:
+            exported = f"PDF export failed ({type(exc).__name__}: {str(exc)[:120]}); run `cvtailor final` again."
+    elif export and has_suggestions(final_doc):
+        exported = "PDF not exported yet: resolve every suggestion first."
     (run_dir / "final.json").write_text(json.dumps({"ok": report.ok, "problems": report.problems,
                                                     "outcomes": [o.model_dump() for o in outcomes], "counts": counts,
-                                                    "layout": layout}, indent=2))
+                                                    "layout": layout, "pdf": exported}, indent=2))
     text = ("Final check OK." if report.ok else "Final check found problems: " + "; ".join(report.problems[:5]))
     text += f" Edits: {counts['accepted']} accepted, {counts['edited']} edited, {counts['rejected']} rejected."
     if layout:
         text += " " + layout
+    if exported:
+        text += " " + exported
     _print_action(Action(action="say", step="final", text=text))
     return 0 if report.ok else 1
 
@@ -268,6 +358,41 @@ def main(argv: list[str] | None = None) -> int:
     fin.add_argument("--fix-layout", action="store_true",
                      help="move a role split across two pages to the next page (edits the copy directly)")
     fin.add_argument("--repo", default=".")
+    fin.add_argument("--keep-layout", action="store_true",
+                     help="export the PDFs even though a role is split across pages")
+    fin.add_argument("--no-export", action="store_true",
+                     help="do not export the resume and the cover letter to PDF after a clean check")
+    let = sub.add_parser(
+        "letter", help="write the cover letter of a run again: with requested changes, shorter, or within a limit",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Rewrite the cover letter of a run (default: the current run) and update its Google Doc.\n"
+            "The letter is first written by `cvtailor run` right after the resume edits; use this command\n"
+            "for changes. Requests accumulate across calls. Calls the model like `cvtailor run`.\n\n"
+            "Reads: the run folder, facts.json, profile.yaml (motivation, relocation, contacts for the header).\n"
+            "Writes: runs/<run>/letter.json, letter.txt, letter_result.json, summary.txt; the letter Google Doc\n"
+            "(a new document if the old one was edited by hand). Network: Google Drive and Docs, the model."),
+        epilog=(
+            "lengths (characters with spaces, without the contacts header):\n"
+            "  full   1300-1800, at most 2000 (default)\n"
+            "  short  650-900, at most 1000\n"
+            "  --max-chars N   at most N, for a site with a field limit\n\n"
+            "examples:\n"
+            "  cvtailor letter --feedback \"mention the metrics dashboards, drop the relocation sentence\"\n"
+            "  cvtailor letter --short\n"
+            "  cvtailor letter --max-chars 900 --json\n\n"
+            "output: the run summary as text, or with --json one action line as for `cvtailor run`.\n"
+            "exit code: 0 when the command ran (check the action), 1 on a configuration error."))
+    let.add_argument("--feedback", help="what to change, in the candidate's words")
+    size = let.add_mutually_exclusive_group()
+    size.add_argument("--short", dest="mode", action="store_const", const="short", help="short letter (650-900)")
+    size.add_argument("--full", dest="mode", action="store_const", const="full", help="full letter (1300-1800)")
+    size.add_argument("--max-chars", type=int, metavar="N", help="hard character limit, e.g. a form field")
+    let.add_argument("--run", help="run folder (default: the current run)")
+    let.add_argument("--no-run", action="store_true",
+                     help="only save the request; then `cvtailor next --from letter` for manual mode")
+    let.add_argument("--json", dest="as_json", action="store_true", help="print the stopping action as one JSON line")
+    let.add_argument("--repo", default=".")
     lgn = sub.add_parser("login", help="sign in to Google (opens a browser)")
     lgn.add_argument("--repo", default=".")
 
@@ -284,7 +409,12 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_run(Path(args.repo), args.company, args.resume, args.run, args.answer, args.from_step,
                        args.non_interactive, args.as_json, args.url)
     if args.group == "final":
-        return cmd_final(Path(args.repo), args.run, args.fix_layout)
+        return cmd_final(Path(args.repo), args.run, args.fix_layout, not args.no_export, args.keep_layout)
+    if args.group == "letter":
+        if args.max_chars is not None and args.max_chars < 300:
+            parser.error("--max-chars must be at least 300")
+        return cmd_letter(Path(args.repo), args.run, args.feedback, args.mode, args.max_chars, args.no_run,
+                          args.as_json)
     if args.group == "login":
         login(Path(args.repo))
         print("signed in")

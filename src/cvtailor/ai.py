@@ -26,7 +26,8 @@ class AiSettings(BaseModel):
     command: list[str] = ["claude", "-p", "--model", "{model}", "--output-format", "json", "--tools", "",
                           "--no-session-persistence", "--strict-mcp-config", "--setting-sources", "project",
                           "--system-prompt", SYSTEM_PROMPT]
-    models: dict[str, str] = {"extract": "sonnet", "route": "sonnet", "analyze": "sonnet", "tailor": "opus"}
+    models: dict[str, str] = {"extract": "sonnet", "route": "sonnet", "analyze": "sonnet", "tailor": "opus",
+                              "letter": "opus"}
     default_model: str = "sonnet"
     timeout_s: int = 240
     max_run_seconds: int = 240
@@ -40,6 +41,7 @@ class CallRecord(BaseModel):
     error: str = ""
     seconds: float = 0.0
     retry: bool = False
+    parallel: bool = False  # the cover letter drafted while the resume edits were planned
     input_chars: int = 0
     output_chars: int = 0
     input_tokens: int | None = None

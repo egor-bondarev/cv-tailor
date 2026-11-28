@@ -19,13 +19,16 @@ job posting ──► AI: extract requirements ──► AI: pick base resume
                                                    │
              Python: apply edits as Google Docs suggestions, verify text and styles
                                                    │
-             you: review suggestions in Google Docs
+             AI: cover letter ──► Python: checks (facts, numbers, quote, length) ──► second model reviews it
+                                                   │
+             you: review suggestions and the letter ──► final check ──► PDFs of both
 ```
 
 - **AI only where language understanding is needed:** reading the job posting, choosing a resume, the analysis, writing the edits, an independent review.
 - **Everything else is deterministic Python:** Google API calls, document parsing, validation, building `batchUpdate` requests, verification, reports.
 - **No invented facts.** Each edit cites fact ids from `facts.json`. Every number in the new text must match a metric of a cited fact, and facts from one job can't be used in another job's bullets.
 - **Originals are never modified.** Edits go into a copy, and only as suggestions.
+- **Cover letter next to the copy.** A plain-text Google Doc in the vacancy language, built from the same facts. An optional hook retells one sentence in which the company describes itself, quoted verbatim from the vacancy. Your motivation comes from `profile.yaml`; contacts are added by Python and never sent to a model.
 - **Agent-agnostic.** The agent needs only a shell. `cvtailor next` tells it the next step: write JSON for a prompt, ask you a question, or show a summary.
 
 ## Requirements
@@ -86,6 +89,16 @@ The parser expects a Google Doc with this structure (other layouts will fail lou
    cvtailor facts check --offline  # without reading Google Docs
    ```
 
+4. **Profile for the cover letter** (optional, but without it the letter is unsigned and has no motivation):
+
+   ```bash
+   cp profile.example.yaml profile.yaml
+   ```
+
+   - `contacts`: your name signs the letter; email, phone and LinkedIn go above it only with `cover_letter.header: true`. They stay local.
+   - `motivation`: what you look for in work, one concrete item per entry with an `id`. The letter connects these items to what the company says about itself and never invents motivation beyond them.
+   - `relocation`: your base city and a phrase such as `open to relocation`. It is mentioned only when the vacancy is in another city or country or restricts location.
+
 ## Usage
 
 **With Claude Code (recommended).** Open Claude Code in the repository root and paste a vacancy: "tailor my resume to this vacancy at Acme: …". The project skill [`.claude/skills/cv-tailor/SKILL.md`](.claude/skills/cv-tailor/SKILL.md) starts `cvtailor run`, which calls the model for every AI step itself (`claude -p`, a fresh small context per step); the chat only relays the resume question and shows the link to the copy. Review the suggestions (each has a comment with its reason and facts) in Google Docs, then say "done" and it runs the final check. Other agents can follow the same file as instructions.
@@ -98,13 +111,18 @@ cvtailor run --url https://jobs.example.com/123 # or download the vacancy page (
 cvtailor run --answer 1                         # if it stopped with a question
 cvtailor final                                  # after you accepted/rejected suggestions in Docs
 cvtailor final --fix-layout                     # if final says a role is split across two pages
+cvtailor letter --feedback "drop the second achievement"  # rewrite the cover letter of the current run
+cvtailor letter --short                         # 650-900 characters (default full: 1300-1800)
+cvtailor letter --max-chars 900                 # a site with a field limit
 ```
 
 `run` stops only when it needs you: a question, the summary, Google sign-in, or `continue` after its time budget (`ai.max_run_seconds`, so a chat agent's shell call does not time out; just run it again). `--non-interactive` takes the top-ranked resume without asking, `--json` prints the stopping action as one JSON line, `--from STEP` restarts from a step. Model calls and their tokens are logged to `runs/<run>/ai_calls.jsonl`.
 
 `--url` downloads the page (http(s) only, 20 s timeout, 3 MB limit, no cookies) and keeps `vacancy.url`, `vacancy.html` and the extracted `vacancy.txt` in the run folder. Role, company and description come from the schema.org `JobPosting` block many job boards embed, otherwise from the page's visible text; `--company` is needed only when the page does not name the company. Pages that need a browser or a sign-in (LinkedIn) give almost no text: then pass the text on stdin with the same `--url` (the terminal asks you to paste it).
 
-`final` also exports the copy to PDF and checks that no role starts on one page and ends on the next. `--fix-layout` fixes such a role directly in the copy: a page break before its heading, and the manual page break right after it (which would now leave a near-empty page) removed; it re-checks until every role fits.
+The cover letter goes into a Google Doc in the company folder, named `<Name>. Cover Letter - <Role>`. `cvtailor run` writes and reviews it in parallel with the resume edits, because it needs only the vacancy, the analysis and the facts. In manual mode it is written after the edits. The letter is signed with your name. The contacts header is off by default, because a letter is usually pasted into a form or an e-mail; set `cover_letter.header: true` to add it for a PDF attachment. The run summary shows its link and length, the hook (strong, weak, or not found), the motivation items used, whether relocation is mentioned and why, and the second model's verdict per paragraph. `cvtailor letter` rewrites it with your requests (they accumulate), a shorter mode or a character limit, and updates the same document; if you edited the document by hand, it is kept and a new one is written. Set `cover_letter.enabled: false` in `config.yaml` to skip the letter.
+
+`final`, once no suggestions remain and the check passes, exports the resume and the letter to PDF in the company folder (`--no-export` skips it; a later `final` replaces those files). If a role is split across pages, it exports nothing until you choose: `--fix-layout` moves the role and exports, `--keep-layout` exports as it is. It also checks that no role starts on one page and ends on the next. `--fix-layout` fixes such a role directly in the copy: a page break before its heading, and the manual page break right after it (which would now leave a near-empty page) removed; it re-checks until every role fits.
 
 **Manual mode.** `cvtailor init` + `cvtailor next` hand every AI step to an agent instead: `next` returns `ai` (write JSON for a prompt), `ask_user` (answer with `--answer`), `say`, `auth` or `done`. Useful when no model command is available.
 
@@ -112,6 +130,7 @@ cvtailor final --fix-layout                     # if final says a role is split 
 
 - Your resumes, facts, configs, runs, and Google tokens are git-ignored. Check with `git status --ignored` before pushing a fork.
 - The job posting, resume blocks, and verified facts are sent to the AI agent you use, and to Codex if review is enabled. Keep `facts.json` free of personal data. The prompt tells the model to leave it out.
+- From `profile.yaml`, only the motivation items and the relocation base are sent to the model. Contacts are written into the letter document by Python.
 - `credentials.json` and `token.json` give access to your whole Drive. Keep them local. You can revoke access at <https://myaccount.google.com/permissions>.
 
 ## Roadmap
@@ -131,9 +150,9 @@ Later: a fully scripted `cvtailor run` (AI steps via a headless agent CLI), page
 ```text
 DESIGN.md              design document (Russian)
 docs/google-setup.md   Google Cloud + OAuth setup
-prompts/               prompts for AI steps (build_facts.md is ready)
+prompts/               prompts for AI steps (extract … tailor, review, cover_letter, review_letter, build_facts)
 scripts/               helper scripts (google_check.py)
-src/cvtailor/          the CLI (in progress)
+src/cvtailor/          the CLI
 *.example.*            config and data examples
 ```
 

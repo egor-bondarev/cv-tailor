@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -28,6 +29,13 @@ class Limits(BaseModel):
     total_editable_max_ratio: float = 1.05
 
 
+class CoverLetterSettings(BaseModel):
+    enabled: bool = True
+    mode: Literal["full", "short"] = "full"
+    export_pdf: bool = True  # `final` exports the resume and the letter to PDF in the company folder
+    header: bool = False  # contacts above the letter (for a PDF attachment); the name always signs it
+
+
 class Config(BaseModel):
     model_config = ConfigDict(extra="allow")
     output_folder_id: str
@@ -40,6 +48,8 @@ class Config(BaseModel):
     review_fix_rounds: int = 1
     doc_comments: bool = True
     ai: AiSettings = AiSettings()
+    profile_path: str = "profile.yaml"
+    cover_letter: CoverLetterSettings = CoverLetterSettings()
 
 
 class ResumeConfig(BaseModel):

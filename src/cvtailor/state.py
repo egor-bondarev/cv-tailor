@@ -21,23 +21,30 @@ from cvtailor.config import Config, ConfigError, ResumeConfig
 from cvtailor.docmodel import has_suggestions, load_doc
 from cvtailor.facts import FactsFile, RoleMapError, check_facts
 from cvtailor.google_api import AuthRequired, GoogleClient
+from cvtailor.letter import (
+    char_count, check_letter, clean_letter, full_text, letter_doc_name, letter_fact_ids, letter_pack,
+    digest, make_letter_context, quote_in_text, replace_text_requests, review_letter_pack,
+)
+from cvtailor.letter import limits as letter_limits
 from cvtailor.models import Op, ParseError
 from cvtailor.naming import doc_name, pick_folder, run_dir_name
+from cvtailor.profile import Profile
 from cvtailor.packs import analyze_pack, extract_pack, review_pack, route_pack, tailor_pack
 from cvtailor.parse import parse_resume
 from cvtailor.report import ReportData, op_comment, review_md, summary_txt
 from cvtailor.requests import build_requests
 from cvtailor.reviewer import resolve_reviewer, run_review
-from cvtailor.schemas import AiPlan, Analysis, Review, Route, Vacancy
+from cvtailor.schemas import AiPlan, Analysis, LetterAi, Review, Route, Vacancy
 from cvtailor.validate import PlanContext, make_context, split_valid, validate_ops
 from cvtailor.verify import verify_applied
 
-STEPS = ["extract", "route", "copy", "analyze", "tailor", "review", "apply", "comment", "report", "done"]
+STEPS = ["extract", "route", "copy", "analyze", "tailor", "review", "apply", "comment", "letter", "report", "done"]
 AI_FILES = {
     "extract": ("extract.md", "extract.pack.md", "vacancy.json"),
     "route": ("route.md", "route.pack.md", "route.json"),
     "analyze": ("analyze.md", "analyze.pack.md", "analysis.json"),
     "tailor": ("tailor.md", "tailor.pack.md", "plan_ai.json"),
+    "letter": ("cover_letter.md", "letter.pack.md", "letter_ai.json"),
 }
 MAX_REISSUES = 3
 AUTH_TEXT = "Google sign-in is required: run `cvtailor login` (it opens a browser), then run `cvtailor next` again."
@@ -79,6 +86,20 @@ class RunState(BaseModel):
     comments: dict[str, str] = {}
     apply_started: bool = False
     applied: bool = False
+    # cover letter (v2 V6)
+    letter_stage: Literal["write", "review", "doc", "done"] = "write"
+    letter_round: int = 0
+    letter_mode: Literal["full", "short"] | None = None
+    letter_max_chars: int | None = None
+    letter_feedback: list[str] = []
+    letter_revise: bool = False
+    letter_warnings: list[str] = []
+    letter_id: str | None = None
+    letter_name: str | None = None
+    letter_url: str | None = None
+    letter_revision: str | None = None
+    letter_writing: bool = False
+    pdf_ids: dict[str, str] = {}
 
     @property
     def path(self) -> Path:
@@ -102,6 +123,7 @@ class Deps:
     reviewer_run: Callable = subprocess.run
     which: Callable[[str], str | None] = shutil.which
     today: date = field(default_factory=date.today)
+    profile: Profile | None = None
 
 
 def init_run(repo: Path, company: str, vacancy_text: str, forced_resume: str | None,
@@ -125,6 +147,17 @@ def init_run(repo: Path, company: str, vacancy_text: str, forced_resume: str | N
     state.save()
     (runs / ".current").write_text(name)
     return state
+
+
+PREFETCH_ANSWER = "letter_ai.prefetch.json"
+PREFETCH_META = "letter_prefetch.json"
+
+
+def run_letter_review(letter: LetterAi, lctx, deps: "Deps"):
+    cfg = deps.cfg
+    prompt = (deps.repo / "prompts" / "review_letter.md").read_text()
+    return run_review(resolve_reviewer(cfg, deps.which), prompt, review_letter_pack(letter, lctx),
+                      list(range(1, len(letter.paragraphs) + 1)), cfg.reviewer_timeout_s, run=deps.reviewer_run)
 
 
 class RunLocked(Exception):
@@ -282,6 +315,8 @@ class Runner:
 
         def judge(v: Vacancy):
             v, errs = check_vacancy(v, self.d.facts)
+            # a hook candidate must be a verbatim quote: drop the ones the model paraphrased (v2 V6)
+            v = v.model_copy(update={"hooks": [h for h in v.hooks if quote_in_text(h.quote, text)][:3]})
             if not errs:
                 self.write("vacancy.json", v.model_dump())
                 self.advance("route")
@@ -399,7 +434,7 @@ class Runner:
             from cvtailor.models import VerifyReport
             self.write("review.json", {"status": "none: no edits", "review": None})
             self.write("verify.json", VerifyReport(ok=True, problems=[]).model_dump())
-            self.advance("report")
+            self.advance("letter")
             return None
         command = resolve_reviewer(self.d.cfg, self.d.which)
         prompt = (self.d.repo / "prompts" / "review.md").read_text()
@@ -492,8 +527,157 @@ class Runner:
                 self.s.notes.append(f"comments: {len(self.s.comments)} of {len(data.applied)} posted ({failed})")
             elif self.s.comments:
                 self.s.notes.append("each edit has a comment in the document with its reason and facts")
+        self.advance("letter")
+        return None
+
+    # --- cover letter (v2 V6) ------------------------------------------------------
+    def letter_ctx(self):
+        cl = self.d.cfg.cover_letter
+        lim = letter_limits(self.s.letter_mode or cl.mode, self.s.letter_max_chars)
+        texts = [b.text for b in self.ctx().resume.blocks if b.kind in ("title", "summary")]
+        return make_letter_context(self.vacancy(), (self.run / "vacancy.txt").read_text(), self.d.facts,
+                                   self.d.profile, lim, texts)
+
+    def step_letter(self, answer):
+        """Write the letter, review it, put it in a Google Doc. A failure is reported, never blocks the resume."""
+        if not self.d.cfg.cover_letter.enabled:
+            self.advance("report")
+            return None
+        try:
+            return self._letter()
+        except _Blocked as blk:
+            self.s.notes = [n for n in self.s.notes if not n.startswith("letter:")]
+            self.s.notes.append(f"letter: not written ({blk.text})")
+            self.write("letter_result.json", {"ok": False, "error": blk.text})
+            self.advance("report")
+            return None
+
+    def letter_inputs(self):
+        lctx = self.letter_ctx()
+        analysis = Analysis.model_validate(self.read("analysis.json"))
+        return lctx, analysis, letter_fact_ids(analysis, self.d.facts)
+
+    def adopt_prefetch(self, pack_text: str) -> bool:
+        """Take the draft `cvtailor run` wrote in parallel with the resume edits, if it was made from this input."""
+        meta_path, raw = self.run / PREFETCH_META, self.run / PREFETCH_ANSWER
+        if not (meta_path.exists() and raw.exists()):
+            return False
+        if json.loads(meta_path.read_text()).get("pack_sha") != digest(pack_text):
+            meta_path.unlink()
+            raw.unlink()
+            return False
+        out = self.run / AI_FILES["letter"][2]
+        if out.exists():
+            out.rename(self._free(out, "stale"))
+        raw.rename(out)
+        (self.run / AI_FILES["letter"][1]).write_text(pack_text)
+        self.s.awaiting, self.s.reissues = "letter", 0
+        self.s.save()
+        return True
+
+    def _letter(self):
+        lctx = self.letter_ctx()
+        if self.s.letter_stage == "write":
+            lctx, analysis, fact_ids = self.letter_inputs()
+            previous = None
+            if (self.s.letter_revise or self.s.letter_round) and (self.run / "letter.json").exists():
+                previous = LetterAi.model_validate(self.read("letter.json"))
+            if previous is None and self.s.awaiting != "letter" and not self.s.errors:
+                self.adopt_prefetch(letter_pack(lctx, analysis, fact_ids, [], None, self.s.letter_feedback))
+
+            def judge(letter: LetterAi):
+                letter = clean_letter(letter)
+                errs, warnings = check_letter(letter, lctx)
+                if not errs:
+                    self.write("letter.json", letter.model_dump())
+                    self.s.letter_warnings = warnings
+                    self.s.letter_stage = "review"
+                    self.s.save()
+                return None, errs
+
+            act = self.ai("letter", lambda: letter_pack(lctx, analysis, fact_ids, self.s.errors, previous,
+                                                        self.s.letter_feedback), LetterAi, judge)
+            if act is not None:
+                return act
+        if self.s.letter_stage == "review":
+            letter = LetterAi.model_validate(self.read("letter.json"))
+            cfg = self.d.cfg
+            meta_path = self.run / PREFETCH_META
+            meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+            meta_path.unlink(missing_ok=True)
+            if meta.get("review_status") and meta.get("letter_sha") == digest(letter.model_dump()):
+                # reviewed in parallel with the resume edits
+                review = Review.model_validate(meta["review"]) if meta.get("review") else None
+                status = meta["review_status"]
+            else:
+                review, status = run_letter_review(letter, lctx, self.d)
+            flagged = [v for v in review.verdicts if v.verdict != "supported"] if review else []
+            if self.s.letter_round:
+                status += " (after a fix round)"
+            self.write("letter_review.json", {"status": status, "review": review.model_dump() if review else None})
+            if flagged and self.s.letter_round < cfg.review_fix_rounds:
+                out = self.run / AI_FILES["letter"][2]
+                if out.exists():
+                    out.rename(self._free(out, "attempt"))
+                self.s.letter_round += 1
+                self.s.letter_stage = "write"
+                self.s.attempts.pop("letter", None)
+                self.advance("letter")
+                self.s.errors = [CheckError(rule="review", op=v.op, detail=f"independent fact checker: {v.verdict}, "
+                                            f"«{v.quote}» — {v.comment}".rstrip(" —")) for v in flagged]
+                self.s.save()
+                return None
+            self.s.letter_stage = "doc"
+            self.s.save()
+        if self.s.letter_stage == "doc":
+            self.letter_doc(lctx)
         self.advance("report")
         return None
+
+    def letter_doc(self, lctx) -> None:
+        letter = LetterAi.model_validate(self.read("letter.json"))
+        text = full_text(letter, self.d.profile, self.d.cfg.cover_letter.header)
+        (self.run / "letter.txt").write_text(text)
+        if not self.s.folder_id:
+            raise _Blocked("no company folder in Drive for this run")
+        client, kept_old = self.client(), False
+        if self.s.letter_id and not self.s.letter_writing:
+            doc = client.get_doc(self.s.letter_id)
+            if doc.get("revisionId") != self.s.letter_revision:
+                kept_old = True  # edited by hand since the last write: keep it, write a new document
+                self.s.letter_id = self.s.letter_name = self.s.letter_url = None
+        if not self.s.letter_id:
+            name = self.s.letter_name or letter_doc_name(self.d.profile, self.vacancy(), self.s.company,
+                                                         client.list_doc_names(self.s.folder_id))
+            self.s.letter_id = client.create_doc(name, self.s.folder_id)
+            self.s.letter_name = name
+            self.s.letter_url = f"https://docs.google.com/document/d/{self.s.letter_id}/edit"
+            self.s.save()
+        self.s.letter_writing = True
+        self.s.save()
+        client.batch_update(self.s.letter_id, {"requests": replace_text_requests(client.get_doc(self.s.letter_id), text)})
+        self.s.letter_revision = client.get_doc(self.s.letter_id).get("revisionId")
+        self.s.letter_writing = False
+        review_raw = self.read("letter_review.json") if (self.run / "letter_review.json").exists() else {}
+        verdicts = (review_raw.get("review") or {}).get("verdicts", [])
+        name = self.d.profile.contacts.name.strip() if self.d.profile else ""
+        warnings = list(self.s.letter_warnings)
+        if not name:
+            warnings.append("no name in profile.yaml contacts: the letter is signed without a name")
+        self.write("letter_result.json", {
+            "ok": True, "url": self.s.letter_url, "name": self.s.letter_name, "count": char_count(letter),
+            "limits": lctx.limits.describe(), "mode": lctx.limits.mode, "language": letter.language,
+            "hook": letter.hook.model_dump() if letter.hook else None,
+            "motivation": sorted({m for p in letter.paragraphs for m in p.motivation}),
+            "has_motivation": bool(self.d.profile and self.d.profile.motivation),
+            "relocation": letter.relocation.model_dump(), "reviewer": review_raw.get("status", "none"),
+            "flagged": [v for v in verdicts if v.get("verdict") != "supported"],
+            "warnings": warnings, "kept_old_doc": kept_old, "model_notes": letter.notes,
+        })
+        self.s.notes = [n for n in self.s.notes if not n.startswith("letter:")]
+        self.s.letter_stage = "done"
+        self.s.letter_revise = False
+        self.s.save()
 
     def report_data(self) -> ReportData:
         from cvtailor.models import VerifyReport
@@ -507,6 +691,8 @@ class Runner:
             review=Review.model_validate(review_raw["review"]) if review_raw["review"] else None,
             reviewer_status=review_raw["status"], verify=VerifyReport.model_validate(self.read("verify.json")),
             notes=self.s.notes,
+            letter=self.read("letter_result.json") if (self.run / "letter_result.json").exists() else None,
+            letter_text=(self.run / "letter.txt").read_text() if (self.run / "letter.txt").exists() else "",
         )
 
     def step_report(self, answer):
@@ -541,6 +727,8 @@ class Runner:
             self.s.attempts.pop(st, None)
         if STEPS.index(target) <= STEPS.index("tailor"):
             self.s.review_round = 0
+        if STEPS.index(target) <= STEPS.index("letter"):
+            self.s.letter_stage, self.s.letter_round = "write", 0
         if STEPS.index(target) <= STEPS.index("route"):
             self.s.options, self.s.question = [], None
             self.s.resume_id = self.s.forced_resume

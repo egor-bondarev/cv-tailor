@@ -196,6 +196,29 @@ class GoogleClient:
         self._require(file_id in self.allowed_docs or self.in_output(file_id), "export_pdf", file_id)
         return self._call(self.drive.files().export(fileId=file_id, mimeType="application/pdf"))
 
+    def create_doc(self, name: str, parent_id: str) -> str:
+        """An empty Google Doc in an output folder (the cover letter, v2 V6)."""
+        self._require_output("create_doc", parent_id)
+        body = {"name": name, "mimeType": DOC_MIME, "parents": [parent_id]}
+        fid = self._call(self.drive.files().create(body=body, fields="id"), write=True)["id"]
+        self._in_output[fid] = True
+        return fid
+
+    def upload_pdf(self, name: str, parent_id: str, data: bytes, file_id: str | None = None) -> str:
+        """Upload a PDF to an output folder, or replace the content of an earlier upload `file_id`."""
+        from googleapiclient.http import MediaInMemoryUpload
+
+        media = MediaInMemoryUpload(data, mimetype="application/pdf", resumable=False)
+        if file_id:
+            self._require_writable("upload_pdf", file_id)
+            req = self.drive.files().update(fileId=file_id, body={"name": name}, media_body=media, fields="id")
+            return self._call(req, write=True)["id"]
+        self._require_output("upload_pdf", parent_id)
+        req = self.drive.files().create(body={"name": name, "parents": [parent_id]}, media_body=media, fields="id")
+        fid = self._call(req, write=True)["id"]
+        self._in_output[fid] = True
+        return fid
+
     def rename(self, file_id: str, name: str) -> None:
         self._require_writable("rename", file_id)
         self._call(self.drive.files().update(fileId=file_id, body={"name": name}, fields="id"), write=True)

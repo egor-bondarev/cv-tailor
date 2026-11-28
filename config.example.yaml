@@ -31,10 +31,21 @@ ai:
   command: [claude, -p, --model, "{model}", --output-format, json, --tools, "", --no-session-persistence, --strict-mcp-config,
             --setting-sources, project,
             --system-prompt, "You are one step of a scripted pipeline. Follow the step instructions in the user message. You cannot read or write files: answer with exactly one JSON object and nothing else."]
-  models: {extract: sonnet, route: sonnet, analyze: sonnet, tailor: opus}
+  models: {extract: sonnet, route: sonnet, analyze: sonnet, tailor: opus, letter: opus}
   default_model: sonnet
   timeout_s: 240
   max_run_seconds: 240
+
+# Cover letter (v2 V6): written right after the resume edits into a Google Doc in the company folder.
+# mode: full (1300-1800 characters) | short (650-900); `cvtailor letter --short / --max-chars N` per run.
+# export_pdf: `cvtailor final` exports the resume and the letter to PDF after a clean check.
+# header: put the contacts from profile.yaml above the letter (for a PDF attachment); the name always signs it.
+profile_path: profile.yaml
+cover_letter:
+  enabled: true
+  mode: full
+  export_pdf: true
+  header: false
 
 # Validator limits (characters / ratios to the original block). Defaults shown.
 limits:
