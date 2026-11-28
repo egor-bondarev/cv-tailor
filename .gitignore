@@ -7,6 +7,7 @@ facts.json
 facts_report.md
 config.yaml
 resumes.yaml
+profile.yaml
 runs/
 cache/
 tests/fixtures/private/
